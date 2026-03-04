@@ -1,26 +1,192 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* Cores em HSL para facilitar a manipulação */
+  --color-background: hsl(210 20% 98%);
+  --color-foreground: hsl(222 47% 11%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(222 47% 11%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(222 47% 11%);
+  --color-primary: hsl(221 83% 53%);
+  --color-primary-foreground: hsl(210 40% 98%);
+  --color-secondary: hsl(210 40% 96%);
+  --color-secondary-foreground: hsl(222 47% 11%);
+  --color-muted: hsl(210 40% 96%);
+  --color-muted-foreground: hsl(215 16% 47%);
+  --color-accent: hsl(210 40% 96%);
+  --color-accent-foreground: hsl(222 47% 11%);
+  --color-destructive: hsl(0 84% 60%);
+  --color-destructive-foreground: hsl(210 40% 98%);
+  --color-success: hsl(160 84% 39%);
+  --color-success-foreground: hsl(210 40% 98%);
+  --color-warning: hsl(38 92% 50%);
+  --color-warning-foreground: hsl(222 47% 11%);
+  --color-border: hsl(214 32% 91%);
+  --color-input: hsl(214 32% 91%);
+  --color-ring: hsl(221 83% 53%);
+
+  /* Cores para gráficos */
+  --chart-1: 221 83% 53%;
+  --chart-2: 142 76% 36%;
+  --chart-3: 48 96% 53%;
+  --chart-4: 0 84% 60%;
+  --chart-5: 271 91% 65%;
+
+  /* Fontes */
+  --font-sans: 'Inter', system-ui, sans-serif;
+
+  /* Border radius */
+  --radius: 0.625rem;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Dark mode - usando classe .dark em vez de media query */
+.dark {
+  --color-background: hsl(222 47% 6%);
+  --color-foreground: hsl(210 40% 95%);
+  --color-card: hsl(222 47% 9%);
+  --color-card-foreground: hsl(210 40% 95%);
+  --color-popover: hsl(222 47% 9%);
+  --color-popover-foreground: hsl(210 40% 95%);
+  --color-primary: hsl(221 83% 53%);
+  --color-primary-foreground: hsl(210 40% 98%);
+  --color-secondary: hsl(222 47% 14%);
+  --color-secondary-foreground: hsl(210 40% 95%);
+  --color-muted: hsl(222 47% 14%);
+  --color-muted-foreground: hsl(215 16% 57%);
+  --color-accent: hsl(222 47% 14%);
+  --color-accent-foreground: hsl(210 40% 95%);
+  --color-destructive: hsl(0 62% 30%);
+  --color-destructive-foreground: hsl(210 40% 98%);
+  --color-success: hsl(160 84% 30%);
+  --color-success-foreground: hsl(210 40% 98%);
+  --color-warning: hsl(38 92% 40%);
+  --color-warning-foreground: hsl(210 40% 98%);
+  --color-border: hsl(222 47% 18%);
+  --color-input: hsl(222 47% 18%);
+  --color-ring: hsl(221 83% 53%);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  .glass-card {
+    background-color: color-mix(in srgb, var(--color-card) 80%, transparent);
+    backdrop-filter: blur(4px);
+    border: 1px solid var(--color-border);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
+
+  .stat-card {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+}
+
+@layer utilities {
+
+  /* Status badges */
+  .status-paid {
+    background-color: color-mix(in srgb, var(--color-success) 10%, transparent);
+    color: var(--color-success);
+    border: 1px solid color-mix(in srgb, var(--color-success) 20%, transparent);
+  }
+
+  .status-pending {
+    background-color: color-mix(in srgb, var(--color-warning) 10%, transparent);
+    color: var(--color-warning);
+    border: 1px solid color-mix(in srgb, var(--color-warning) 20%, transparent);
+  }
+
+  .status-overdue {
+    background-color: color-mix(in srgb, var(--color-destructive) 10%, transparent);
+    color: var(--color-destructive);
+    border: 1px solid color-mix(in srgb, var(--color-destructive) 20%, transparent);
+  }
+
+  /* Text colors */
+  .text-success {
+    color: var(--color-success);
+  }
+
+  .text-warning {
+    color: var(--color-warning);
+  }
+
+  .text-destructive {
+    color: var(--color-destructive);
+  }
+
+  /* Background with opacity */
+  .bg-success\/10 {
+    background-color: color-mix(in srgb, var(--color-success) 10%, transparent);
+  }
+
+  .bg-warning\/10 {
+    background-color: color-mix(in srgb, var(--color-warning) 10%, transparent);
+  }
+
+  .bg-destructive\/10 {
+    background-color: color-mix(in srgb, var(--color-destructive) 10%, transparent);
+  }
+
+  .bg-primary\/10 {
+    background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Cores da sidebar */
+:root {
+  --sidebar-background: 222 47% 11%;
+  --sidebar-foreground: 210 40% 98%;
+  --sidebar-primary: 221 83% 53%;
+  --sidebar-accent: 222 47% 16%;
+  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-border: 222 47% 18%;
+  --sidebar-muted: 222 47% 14%;
+}
+
+.dark {
+  --sidebar-background: 222 47% 6%;
+  --sidebar-foreground: 210 40% 98%;
+  --sidebar-primary: 221 83% 53%;
+  --sidebar-accent: 222 47% 12%;
+  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-border: 222 47% 14%;
+  --sidebar-muted: 222 47% 10%;
 }
