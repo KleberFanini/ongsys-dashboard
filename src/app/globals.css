@@ -179,6 +179,8 @@
   --sidebar-accent-foreground: 210 40% 98%;
   --sidebar-border: 222 47% 18%;
   --sidebar-muted: 222 47% 14%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
 }
 
 .dark {
@@ -189,4 +191,6 @@
   --sidebar-accent-foreground: 210 40% 98%;
   --sidebar-border: 222 47% 14%;
   --sidebar-muted: 222 47% 10%;
+  --card: 222 47% 9%;
+  --card-foreground: 210 40% 95%;
 }
