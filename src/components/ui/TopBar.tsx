@@ -50,13 +50,14 @@ export function TopBar({
         const newDarkMode = !isDarkMode
         setIsDarkMode(newDarkMode)
 
-        // Força a mudança do tema via media query
+        console.log('Toggle tema para:', newDarkMode ? 'dark' : 'light')
+
         if (newDarkMode) {
-            document.documentElement.style.colorScheme = 'dark'
-            document.documentElement.setAttribute('data-theme', 'dark')
+            document.documentElement.classList.add('dark')
+            localStorage.setItem('theme', 'dark')
         } else {
-            document.documentElement.style.colorScheme = 'light'
-            document.documentElement.setAttribute('data-theme', 'light')
+            document.documentElement.classList.remove('dark')
+            localStorage.setItem('theme', 'light')
         }
     }
     return (

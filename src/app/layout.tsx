@@ -30,10 +30,15 @@ export default function RootLayout({
             __html: `
         try {
           const theme = localStorage.getItem('theme')
+          console.log('Script anti-flash - tema:', theme)
           if (theme === 'dark') {
             document.documentElement.classList.add('dark')
           } else if (theme === 'light') {
             document.documentElement.classList.remove('dark')
+          } else {
+            // SE NÃO TIVER TEMA SALVO, USA LIGHT (NÃO DARK)
+            document.documentElement.classList.remove('dark')
+            localStorage.setItem('theme', 'light')
           }
         } catch (e) {}
       `,
