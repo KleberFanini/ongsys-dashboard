@@ -14,84 +14,65 @@ export async function GET(request: NextRequest) {
         let whereClause = '1=1'
         const values: any[] = []
 
-        // Filtro de busca (nome, código, documento)
         if (search) {
-            whereClause += ` AND (LOWER(nome) LIKE $${values.length + 1} 
+            whereClause += ` AND (LOWER(nomeEmpresa) LIKE $${values.length + 1} 
                 OR LOWER(codigo) LIKE $${values.length + 1} 
                 OR documento LIKE $${values.length + 1})`
             values.push(`%${search.toLowerCase()}%`)
         }
 
-        // Filtro por tipo de pessoa
         if (type !== 'all') {
             whereClause += ` AND tipo_pessoa = $${values.length + 1}`
             values.push(type === 'PJ' ? 'J' : 'F')
         }
 
-        // Query para dados paginados
         const dataQuery = `
             SELECT 
                 id,
                 codigo,
-                nome,
+                nomeEmpresa as nome,
                 documento,
                 tipo_pessoa,
                 email,
                 telefone,
-                celular,
-                endereco
+                celular
             FROM fornecedores
             WHERE ${whereClause}
-            ORDER BY nome
+            ORDER BY nomeEmpresa
             LIMIT $${values.length + 1} OFFSET $${values.length + 2}
         `
 
-        // Clona os valores para a query de dados (adiciona limit e offset)
         const dataValues = [...values, limit, offset]
-
-        // Query para contagem total (sem limit e offset)
         const countQuery = `
             SELECT COUNT(*) as total
             FROM fornecedores
             WHERE ${whereClause}
         `
 
-        console.log('📝 Query:', dataQuery)
-        console.log('📝 Values:', dataValues)
-
         const [dataResult, countResult] = await Promise.all([
             query(dataQuery, dataValues),
-            query(countQuery, values) // Usa apenas os valores dos filtros
+            query(countQuery, values)
         ])
 
-        // Mapeia os dados para o formato esperado pelo frontend
-        const suppliers = dataResult.rows.map((row: any) => {
-            // Extrai cidade e estado do JSON de endereço
-            let city = '', state = ''
-            if (row.endereco) {
-                try {
-                    const endereco = typeof row.endereco === 'string'
-                        ? JSON.parse(row.endereco)
-                        : row.endereco
-                    city = endereco.cidade || endereco.city || ''
-                    state = endereco.estado || endereco.state || ''
-                } catch (e) {
-                    console.error('Erro ao parsear endereço:', e)
-                }
-            }
+        // 🔍 LOG PARA VER A ESTRUTURA EXATA DO OBJETO
+        if (dataResult.rows.length > 0) {
+            console.log('🔍 CHAVES DISPONÍVEIS:', Object.keys(dataResult.rows[0]));
+            console.log('🔍 VALORES:', dataResult.rows[0]);
+        }
 
-            return {
-                id: row.id,
-                code: row.codigo || '---',
-                name: row.nome,
-                document: row.documento || '---',
-                personType: row.tipo_pessoa === 'J' ? 'PJ' : 'PF',
-                email: row.email || '---',
-                phone: row.telefone || row.celular || '---',
-                city,
-                state
-            }
-        })
+        // Mapeia os dados tentando todas as variações do nome
+        const suppliers = dataResult.rows.map((row: any) => ({
+            id: row.id,
+            code: row.codigo || '---',
+            // Tenta várias formas de pegar o nome
+            name: row.nome || '---',
+            document: row.documento || '---',
+            personType: row.tipo_pessoa === 'J' ? 'PJ' : 'PF',
+            email: row.email || '---',
+            phone: row.telefone || row.celular || '---',
+            city: '',
+            state: ''
+        }))
 
         const total = parseInt(countResult.rows[0].total)
 
@@ -103,7 +84,7 @@ export async function GET(request: NextRequest) {
         })
 
     } catch (error) {
-        console.error('Erro ao buscar fornecedores:', error)
+        console.error('❌ Erro ao buscar fornecedores:', error)
         return NextResponse.json(
             { error: 'Erro interno do servidor' },
             { status: 500 }
