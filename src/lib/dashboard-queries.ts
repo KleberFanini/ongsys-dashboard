@@ -71,7 +71,18 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
       ORDER BY meses.mes
     `)
 
-    // 3. Buscar status das contas
+    // 3. NOVO: Buscar distribuição por unidade de medida
+    const unitMeasureResult = await query(`
+      SELECT 
+        COALESCE(unidadeMedida, 'Não informada') as name,
+        COUNT(*) as value
+      FROM produtos
+      GROUP BY unidadeMedida
+      ORDER BY value DESC
+      LIMIT 8  -- Limitar às 8 principais unidades
+    `)
+
+    // 4. Buscar status das contas
     const statusResult = await query(`
       SELECT 
         'Pendentes' as name,
@@ -104,7 +115,7 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
       ) contas
     `)
 
-    // 4. Buscar contas recentes
+    // 5. Buscar contas recentes
     const recentResult = await query(`
       (SELECT 
         id,
@@ -161,8 +172,8 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
         payable: parseFloat(row.payable) || 0,
         receivable: parseFloat(row.receivable) || 0
       })),
-      statusData: statusResult.rows.map((row: any, index: number) => ({
-        name: row.name,
+      unitMeasureData: unitMeasureResult.rows.map((row: any, index: number) => ({
+        name: row.name || 'Não informada',
         value: parseInt(row.value) || 0,
         fill: COLORS[index % COLORS.length]
       })),

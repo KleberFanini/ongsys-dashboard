@@ -6,7 +6,7 @@ export interface DashboardSummary {
     totalPayable: number
     totalReceivable: number
     monthlyData: MonthlyData[]
-    statusData: StatusData[]
+    unitMeasureData: UnitMeasureData[]
     recentAccounts: RecentAccount[]
 }
 
@@ -16,7 +16,7 @@ export interface MonthlyData {
     receivable: number
 }
 
-export interface StatusData {
+export interface UnitMeasureData {
     name: string
     value: number
     fill: string

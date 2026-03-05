@@ -21,6 +21,20 @@ export default function DashboardPage() {
     const [error, setError] = useState<string | null>(null)
     const [isDarkMode, setIsDarkMode] = useState(false)
 
+    const getUnitColor = (unit: string): string => {
+        const colors: Record<string, string> = {
+            'Unidade': '#3b82f6',
+            'Caixas': '#10b981',
+            'Pacote': '#f59e0b',
+            'Kg': '#ef4444',
+            'Metro': '#8b5cf6',
+            'Litro': '#ec4899',
+            'Par': '#06b6d4',
+            'Dúzia': '#f97316'
+        }
+        return colors[unit] || '#64748b'
+    }
+
     // Detectar o tema atual
     useEffect(() => {
         const checkTheme = () => {
@@ -209,59 +223,61 @@ export default function DashboardPage() {
                     </ResponsiveContainer>
                 </motion.div>
 
-                {/* Gráfico de pizza - Status das contas */}
+                {/* Gráfico de pizza - Unidades de Medida */}
                 <motion.div
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
                     className="bg-card rounded-xl border p-5"
                 >
-                    <h3 className="font-semibold text-card-foreground mb-4">Status das Contas</h3>
+                    <h3 className="font-semibold text-card-foreground mb-4">
+                        Produtos por Unidade de Medida
+                    </h3>
                     <ResponsiveContainer width="100%" height={200}>
                         <PieChart>
                             <Pie
-                                data={data.statusData}
+                                data={data.unitMeasureData}
                                 cx="50%"
                                 cy="50%"
                                 innerRadius={50}
                                 outerRadius={80}
                                 dataKey="value"
-                                paddingAngle={3}
-                                label={(entry) => `${entry.value}`}
+                                paddingAngle={2}
+                                label={(entry) => entry.value > 0 ? entry.value : ''}
                             >
-                                {data.statusData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                {data.unitMeasureData.map((entry, index) => (
+                                    <Cell
+                                        key={`cell-${index}`}
+                                        fill={getUnitColor(entry.name)}
+                                    />
                                 ))}
                             </Pie>
                             <Tooltip
-                                contentStyle={{
-                                    backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
-                                    border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
-                                    borderRadius: '8px',
-                                    fontSize: '12px',
-                                    color: isDarkMode ? '#f8fafc' : '#0f172a',
-                                }}
-                                formatter={(value: any, name: any) => {
-                                    if (typeof value === 'number') {
-                                        return [`${value} conta(s)`, name]
-                                    }
-                                    return [value, name]
-                                }}
+
                             />
                         </PieChart>
                     </ResponsiveContainer>
-                    <div className="flex justify-center gap-4 mt-2 flex-wrap">
-                        {data.statusData.map((s) => (
-                            <div key={s.name} className="flex items-center gap-1.5 text-xs">
+
+                    {/* Legenda com cores */}
+                    <div className="flex justify-center gap-3 mt-3 flex-wrap">
+                        {data.unitMeasureData.map((item) => (
+                            <div key={item.name} className="flex items-center gap-1.5 text-xs">
                                 <div
                                     className="w-2.5 h-2.5 rounded-full"
-                                    style={{ backgroundColor: s.fill }}
+                                    style={{ backgroundColor: item.fill }}
                                 />
                                 <span className="text-muted-foreground">
-                                    {s.name}: {s.value}
+                                    {item.name}: {item.value}
                                 </span>
                             </div>
                         ))}
+                    </div>
+
+                    {/* Total de produtos */}
+                    <div className="mt-3 pt-3 border-t border-border text-center">
+                        <p className="text-xs text-muted-foreground">
+                            Total de {data.totalProducts} produtos cadastrados
+                        </p>
                     </div>
                 </motion.div>
             </div>

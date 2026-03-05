@@ -29,6 +29,7 @@ const items = [
     { title: "Fornecedores", href: "/fornecedores", icon: Users },
     { title: "Contas", href: "/contas", icon: CreditCard },
     { title: "Produtos", href: "/produtos", icon: Package },
+    { title: "Pedidos", href: "/pedidos", icon: Package },
 ]
 
 export function AppSidebar() {
