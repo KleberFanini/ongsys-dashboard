@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
         let whereClause = '1=1'
         const values: any[] = []
 
-        // Filtro de busca - CASE INSENSITIVE
+        // Filtro de busca
         if (search) {
             whereClause += ` AND (LOWER(nomeProduto) LIKE LOWER($${values.length + 1})
                 OR LOWER(codigo) LIKE LOWER($${values.length + 1}))`
@@ -27,41 +27,44 @@ export async function GET(request: NextRequest) {
             values.push(categoria)
         }
 
-        // FILTRO POR STATUS
+        // Filtro por status
         if (status !== 'Todos') {
             whereClause += ` AND LOWER(status) = LOWER($${values.length + 1})`
             values.push(status)
         }
 
-        // Query principal - ordenada por código
+        // Query principal - REMOVIDAS as colunas que não existem
         const dataQuery = `
             SELECT 
                 id,
                 codigo,
                 nomeProduto as nome,
                 grupo as categoria,
-                valorCustoBase as preco,
-                status
+                unidadeMedida,
+                status,
+                descricaoProduto as descricao,
+                origem,
+                contaPadraoPlanoFinanceiro as "contaPadrao",
+                fabricante,
+                valorCustoBase as preco
             FROM produtos
             WHERE ${whereClause}
             ORDER BY CAST(codigo AS INTEGER)
+            LIMIT $${values.length + 1} OFFSET $${values.length + 2}
         `
 
-        // Query com paginação
-        const paginatedQuery = dataQuery + ` LIMIT $${values.length + 1} OFFSET $${values.length + 2}`
         const dataValues = [...values, limit, offset]
-
         const countQuery = `
             SELECT COUNT(*) as total
             FROM produtos
             WHERE ${whereClause}
         `
 
-        console.log('📝 Query:', paginatedQuery)
+        console.log('📝 Query:', dataQuery)
         console.log('📝 Values:', dataValues)
 
         const [dataResult, countResult] = await Promise.all([
-            query(paginatedQuery, dataValues),
+            query(dataQuery, dataValues),
             query(countQuery, values)
         ])
 

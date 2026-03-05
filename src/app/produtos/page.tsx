@@ -12,7 +12,12 @@ import {
     Filter,
     CheckCircle,
     XCircle,
-    Clock
+    Clock,
+    Ruler,
+    Package2,
+    Building2,
+    CreditCard,
+    FileText
 } from "lucide-react"
 import { Input } from "@/src/components/ui/input"
 import { Badge } from "@/src/components/ui/badge"
@@ -39,17 +44,13 @@ interface Product {
     codigo: string
     nome: string
     categoria: string
-    preco: number
+    unidadeMedida: string
     status: string
+    descricao?: string
+    origem?: string
+    contaPadrao?: string
+    fabricante?: string
 }
-
-// Opções de status para o filtro
-const STATUS_OPTIONS = [
-    { value: 'Todos', label: 'Todos os status', icon: null },
-    { value: 'ativo', label: 'Ativo', icon: CheckCircle, color: 'text-success' },
-    { value: 'inativo', label: 'Inativo', icon: XCircle, color: 'text-destructive' },
-    { value: 'pendente', label: 'Pendente', icon: Clock, color: 'text-warning' },
-]
 
 export default function ProdutosPage() {
     const [products, setProducts] = useState<Product[]>([])
@@ -96,7 +97,7 @@ export default function ProdutosPage() {
 
                 setProducts(data.data)
                 setTotalPages(data.totalPages)
-                setTotalItems(data.total)  // SALVA O TOTAL DE ITENS
+                setTotalItems(data.total)
             } catch (error) {
                 console.error('Erro ao buscar produtos:', error)
             } finally {
@@ -160,6 +161,14 @@ export default function ProdutosPage() {
         }
     }
 
+    // Opções de status
+    const STATUS_OPTIONS = [
+        { value: 'Todos', label: 'Todos os status', icon: null },
+        { value: 'ativo', label: 'Ativo', icon: CheckCircle, color: 'text-success' },
+        { value: 'inativo', label: 'Inativo', icon: XCircle, color: 'text-destructive' },
+        { value: 'pendente', label: 'Pendente', icon: Clock, color: 'text-warning' },
+    ]
+
     if (loading && products.length === 0) {
         return (
             <div className="space-y-4 p-6">
@@ -168,7 +177,6 @@ export default function ProdutosPage() {
                     <Skeleton className="h-10 flex-1 max-w-sm" />
                     <Skeleton className="h-10 w-44" />
                     <Skeleton className="h-10 w-40" />
-                    <Skeleton className="h-10 w-32" />
                 </div>
                 <Skeleton className="h-96 w-full" />
             </div>
@@ -207,7 +215,7 @@ export default function ProdutosPage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleExport('filtro')}>
                             <Filter className="w-4 h-4 mr-2" />
-                            Filtro atual
+                            Filtro atual ({totalItems} itens)
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => handleExport('tudo')}>
@@ -242,7 +250,7 @@ export default function ProdutosPage() {
                     </SelectContent>
                 </Select>
 
-                {/* NOVO: Filtro de status */}
+                {/* Filtro de status */}
                 <Select value={status} onValueChange={setStatus}>
                     <SelectTrigger className="w-40">
                         <SelectValue placeholder="Status" />
@@ -262,7 +270,7 @@ export default function ProdutosPage() {
 
             {/* Indicadores de filtros ativos */}
             {(search || categoria !== 'Todos' || status !== 'Todos') && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                     <span>Filtros ativos:</span>
                     {search && (
                         <Badge variant="secondary" className="gap-1">
@@ -293,8 +301,8 @@ export default function ProdutosPage() {
                             <tr className="border-b border-border bg-muted/50">
                                 <th className="text-left p-3 text-muted-foreground font-medium">Código</th>
                                 <th className="text-left p-3 text-muted-foreground font-medium">Nome</th>
-                                <th className="text-left p-3 text-muted-foreground font-medium hidden md:table-cell">Categoria</th>
-                                <th className="text-left p-3 text-muted-foreground font-medium hidden sm:table-cell">Preço</th>
+                                <th className="text-left p-3 text-muted-foreground font-medium hidden md:table-cell">Grupo</th>
+                                <th className="text-left p-3 text-muted-foreground font-medium hidden sm:table-cell">Unidade</th>
                                 <th className="text-left p-3 text-muted-foreground font-medium hidden lg:table-cell">Status</th>
                                 <th className="text-center p-3 text-muted-foreground font-medium">Ações</th>
                             </tr>
@@ -319,8 +327,13 @@ export default function ProdutosPage() {
                                             {product.categoria || 'Sem categoria'}
                                         </Badge>
                                     </td>
-                                    <td className="p-3 hidden sm:table-cell text-card-foreground font-medium">
-                                        {formatCurrency(product.preco || 0)}
+                                    <td className="p-3 hidden sm:table-cell">
+                                        <div className="flex items-center gap-1">
+                                            <Ruler className="w-3 h-3 text-muted-foreground" />
+                                            <span className="text-card-foreground">
+                                                {product.unidadeMedida || 'Não informada'}
+                                            </span>
+                                        </div>
                                     </td>
                                     <td className="p-3 hidden lg:table-cell">
                                         <div className="flex items-center">
@@ -346,6 +359,7 @@ export default function ProdutosPage() {
                                             variant="ghost"
                                             size="sm"
                                             onClick={() => setSelectedProduct(product)}
+                                            title="Ver detalhes"
                                         >
                                             <Eye className="w-4 h-4" />
                                         </Button>
@@ -366,7 +380,11 @@ export default function ProdutosPage() {
                 {/* Paginação */}
                 <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30">
                     <p className="text-sm text-muted-foreground">
-                        Página {page} de {totalPages}
+                        {totalItems > 0 ? (
+                            <>Mostrando {((page - 1) * PAGE_SIZE) + 1} - {Math.min(page * PAGE_SIZE, totalItems)} de {totalItems} produtos</>
+                        ) : (
+                            'Nenhum produto encontrado'
+                        )}
                     </p>
                     <div className="flex gap-1">
                         <Button
@@ -389,49 +407,124 @@ export default function ProdutosPage() {
                 </div>
             </div>
 
-            {/* Modal de detalhes */}
+            {/* Modal de detalhes - AGORA COM TODOS OS CAMPOS */}
             <Dialog open={!!selectedProduct} onOpenChange={() => setSelectedProduct(null)}>
-                <DialogContent className="max-w-md">
+                <DialogContent className="max-w-2xl">
                     <DialogHeader>
-                        <DialogTitle>Detalhes do Produto</DialogTitle>
+                        <DialogTitle className="text-xl">Detalhes do Produto</DialogTitle>
                     </DialogHeader>
                     {selectedProduct && (
-                        <div className="space-y-3">
-                            <div className="flex justify-between py-2 border-b border-border">
-                                <span className="text-muted-foreground text-sm">Código</span>
-                                <span className="text-card-foreground text-sm font-medium">{selectedProduct.codigo}</span>
-                            </div>
-                            <div className="flex justify-between py-2 border-b border-border">
-                                <span className="text-muted-foreground text-sm">Nome</span>
-                                <span className="text-card-foreground text-sm font-medium">{selectedProduct.nome}</span>
-                            </div>
-                            <div className="flex justify-between py-2 border-b border-border">
-                                <span className="text-muted-foreground text-sm">Categoria</span>
-                                <span className="text-card-foreground text-sm font-medium">{selectedProduct.categoria || 'Não informada'}</span>
-                            </div>
-                            <div className="flex justify-between py-2 border-b border-border">
-                                <span className="text-muted-foreground text-sm">Preço</span>
-                                <span className="text-card-foreground text-sm font-medium">{formatCurrency(selectedProduct.preco || 0)}</span>
-                            </div>
-                            <div className="flex justify-between py-2 border-b border-border">
-                                <span className="text-muted-foreground text-sm">Status</span>
-                                <div className="flex items-center gap-2">
-                                    {getStatusIcon(selectedProduct.status)}
-                                    <Badge
-                                        variant="outline"
-                                        className={
-                                            selectedProduct.status?.toLowerCase() === 'ativo'
-                                                ? 'border-success/30 text-success'
-                                                : selectedProduct.status?.toLowerCase() === 'inativo'
-                                                    ? 'border-destructive/30 text-destructive'
-                                                    : selectedProduct.status?.toLowerCase() === 'pendente'
-                                                        ? 'border-warning/30 text-warning'
-                                                        : 'border-muted-foreground/30 text-muted-foreground'
-                                        }
-                                    >
-                                        {selectedProduct.status || 'Não informado'}
-                                    </Badge>
+                        <div className="space-y-4">
+                            {/* Linha 1: Código e Nome */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Package className="w-4 h-4" />
+                                        <span>Código</span>
+                                    </div>
+                                    <p className="text-card-foreground font-mono text-sm font-medium pl-6">
+                                        {selectedProduct.codigo}
+                                    </p>
                                 </div>
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Package2 className="w-4 h-4" />
+                                        <span>Nome</span>
+                                    </div>
+                                    <p className="text-card-foreground text-sm font-medium pl-6">
+                                        {selectedProduct.nome}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Linha 2: Categoria e Status */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Filter className="w-4 h-4" />
+                                        <span>Grupo</span>
+                                    </div>
+                                    <p className="text-card-foreground text-sm font-medium pl-6">
+                                        {selectedProduct.categoria || 'Não informada'}
+                                    </p>
+                                </div>
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        {getStatusIcon(selectedProduct.status)}
+                                        <span>Status</span>
+                                    </div>
+                                    <div className="pl-6">
+                                        <Badge
+                                            variant="outline"
+                                            className={
+                                                selectedProduct.status?.toLowerCase() === 'ativo'
+                                                    ? 'border-success/30 text-success'
+                                                    : selectedProduct.status?.toLowerCase() === 'inativo'
+                                                        ? 'border-destructive/30 text-destructive'
+                                                        : selectedProduct.status?.toLowerCase() === 'pendente'
+                                                            ? 'border-warning/30 text-warning'
+                                                            : 'border-muted-foreground/30 text-muted-foreground'
+                                            }
+                                        >
+                                            {selectedProduct.status || 'Não informado'}
+                                        </Badge>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Linha 3: Unidade de Medida e Fabricante */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Ruler className="w-4 h-4" />
+                                        <span>Unidade de Medida</span>
+                                    </div>
+                                    <p className="text-card-foreground text-sm font-medium pl-6">
+                                        {selectedProduct.unidadeMedida || 'Não informada'}
+                                    </p>
+                                </div>
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Building2 className="w-4 h-4" />
+                                        <span>Fabricante</span>
+                                    </div>
+                                    <p className="text-card-foreground text-sm font-medium pl-6">
+                                        {selectedProduct.fabricante || 'Não informado'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Linha 4: Origem e Conta Padrão */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Package className="w-4 h-4" />
+                                        <span>Origem</span>
+                                    </div>
+                                    <p className="text-card-foreground text-sm font-medium pl-6">
+                                        {selectedProduct.origem || 'Não informada'}
+                                    </p>
+                                </div>
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <CreditCard className="w-4 h-4" />
+                                        <span>Conta Padrão</span>
+                                    </div>
+                                    <p className="text-card-foreground text-sm font-medium pl-6">
+                                        {selectedProduct.contaPadrao || 'Não informada'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Linha 5: Descrição (ocupa linha inteira) */}
+                            <div className="space-y-1">
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <FileText className="w-4 h-4" />
+                                    <span>Descrição</span>
+                                </div>
+                                <p className="text-card-foreground text-sm pl-6 bg-muted/30 p-3 rounded-md">
+                                    {selectedProduct.descricao || 'Sem descrição cadastrada'}
+                                </p>
                             </div>
                         </div>
                     )}

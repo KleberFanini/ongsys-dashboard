@@ -1,4 +1,3 @@
-// ongsys-dashboard/src/app/api/produtos/export/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/src/lib/db'
 
@@ -7,10 +6,11 @@ export async function GET(request: NextRequest) {
         const searchParams = request.nextUrl.searchParams
         const search = searchParams.get('search') || ''
         const categoria = searchParams.get('categoria') || 'Todos'
+        const status = searchParams.get('status') || 'Todos'
         const tipo = searchParams.get('tipo') || 'filtro'
         const page = parseInt(searchParams.get('page') || '1')
 
-        console.log('🚀 Exportação - Parâmetros:', { search, categoria, tipo, page })
+        console.log('🚀 Exportação - Parâmetros:', { search, categoria, status, tipo, page })
 
         let whereClause = '1=1'
         const values: any[] = []
@@ -18,34 +18,40 @@ export async function GET(request: NextRequest) {
         // Aplicar filtros
         if (tipo !== 'tudo') {
             if (search) {
-                whereClause += ` AND (LOWER(nomeProduto) LIKE $${values.length + 1} 
-                    OR LOWER(codigo) LIKE $${values.length + 1})`
-                values.push(`%${search.toLowerCase()}%`)
+                whereClause += ` AND (LOWER(nomeProduto) LIKE LOWER($${values.length + 1})
+                    OR LOWER(codigo) LIKE LOWER($${values.length + 1}))`
+                values.push(`%${search}%`)
             }
 
             if (categoria !== 'Todos') {
                 whereClause += ` AND LOWER(grupo) = LOWER($${values.length + 1})`
                 values.push(categoria)
             }
+
+            if (status !== 'Todos') {
+                whereClause += ` AND LOWER(status) = LOWER($${values.length + 1})`
+                values.push(status)
+            }
         }
 
-        // Query base
+        // Query com APENAS as colunas que existem
         let dataQuery = `
             SELECT 
                 id,
                 codigo,
                 nomeProduto,
-                grupo as categoria,
-                valorCustoBase as preco,
-                status,
                 descricaoProduto,
-                fabricante,
+                grupo as categoria,
                 unidadeMedida,
+                status,
+                fabricante,
                 origem,
-                contaPadraoPlanoFinanceiro
+                contaPadraoPlanoFinanceiro as contaPadrao,
+                valorCustoBase as valorCusto,
+                imported_at as dataImportacao
             FROM produtos
             WHERE ${whereClause}
-            ORDER BY nomeProduto
+            ORDER BY CAST(codigo AS INTEGER)
         `
 
         // Se for por página, adicionar LIMIT
@@ -62,46 +68,56 @@ export async function GET(request: NextRequest) {
         const result = await query(dataQuery, values)
         console.log('📦 Registros encontrados:', result.rows.length)
 
-        // Gerar CSV
-        const csvRows = []
-
-        // Cabeçalho
-        csvRows.push([
+        // Cabeçalho do CSV
+        const headers = [
             'ID',
             'Código',
             'Nome do Produto',
-            'Categoria',
-            'Preço',
-            'Status',
             'Descrição',
-            'Fabricante',
+            'Categoria',
             'Unidade de Medida',
+            'Status',
+            'Fabricante',
             'Origem',
-            'Conta Padrão'
-        ].join(';'))
+            'Conta Padrão',
+            'Valor de Custo',
+            'Data de Importação'
+        ]
+
+        // Gerar CSV
+        const csvRows = []
+        csvRows.push(headers.join(';'))
 
         // Dados
         for (const produto of result.rows) {
-            csvRows.push([
+            const row = [
                 produto.id,
                 produto.codigo || '',
-                `"${produto.nomeproduto || ''}"`,
+                `"${(produto.nomeproduto || '').replace(/"/g, '""')}"`,
+                `"${(produto.descricaoproduto || '').replace(/"/g, '""')}"`,
                 produto.categoria || '',
-                produto.preco ? produto.preco.toString().replace('.', ',') : '0,00',
-                produto.status || '',
-                `"${produto.descricaoproduto || ''}"`,
-                produto.fabricante || '',
                 produto.unidademedida || '',
+                produto.status || '',
+                produto.fabricante || '',
                 produto.origem || '',
-                `"${produto.contapadraoplanoFinanceiro || ''}"`
-            ].join(';'))
+                `"${(produto.contapadrao || '').replace(/"/g, '""')}"`,
+                produto.valorcusto ? produto.valorcusto.toString().replace('.', ',') : '0,00',
+                produto.dataimportacao ? new Date(produto.dataimportacao).toLocaleDateString('pt-BR') : ''
+            ]
+            csvRows.push(row.join(';'))
         }
 
         const csv = csvRows.join('\n')
 
         // Nome do arquivo
         const dataAtual = new Date().toISOString().split('T')[0]
-        const nomeArquivo = `produtos_${dataAtual}_${tipo}.csv`
+        const filtros = []
+        if (search) filtros.push('busca')
+        if (categoria !== 'Todos') filtros.push(categoria.toLowerCase())
+        if (status !== 'Todos') filtros.push(status.toLowerCase())
+
+        const nomeFiltros = filtros.length > 0 ? `_${filtros.join('_')}` : ''
+        const nomeArquivo = `produtos_${dataAtual}${nomeFiltros}_${tipo}.csv`
 
         return new NextResponse(csv, {
             headers: {
