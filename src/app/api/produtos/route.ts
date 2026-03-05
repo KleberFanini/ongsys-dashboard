@@ -1,3 +1,4 @@
+// ongsys-dashboard/src/app/api/produtos/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/src/lib/db'
 
@@ -33,14 +34,14 @@ export async function GET(request: NextRequest) {
             values.push(status)
         }
 
-        // Query principal - REMOVIDAS as colunas que não existem
+        // Query principal - com mapeamento correto dos campos
         const dataQuery = `
             SELECT 
                 id,
                 codigo,
                 nomeProduto as nome,
                 grupo as categoria,
-                unidadeMedida,
+                unidadeMedida,  /* ← Nome original da coluna */
                 status,
                 descricaoProduto as descricao,
                 origem,
@@ -60,18 +61,31 @@ export async function GET(request: NextRequest) {
             WHERE ${whereClause}
         `
 
-        console.log('📝 Query:', dataQuery)
-        console.log('📝 Values:', dataValues)
-
         const [dataResult, countResult] = await Promise.all([
             query(dataQuery, dataValues),
             query(countQuery, values)
         ])
 
+        // Mapear os dados garantindo que unidadeMedida seja capturada corretamente
+        const produtos = dataResult.rows.map((row: any) => ({
+            id: row.id,
+            codigo: row.codigo,
+            nome: row.nome,
+            categoria: row.categoria,
+            // Tenta capturar unidadeMedida de várias formas
+            unidadeMedida: row.unidademedida || 'Não informada',
+            status: row.status,
+            descricao: row.descricao,
+            origem: row.origem,
+            contaPadrao: row.contaPadrao,
+            fabricante: row.fabricante,
+            preco: row.preco
+        }))
+
         const total = parseInt(countResult.rows[0].total)
 
         return NextResponse.json({
-            data: dataResult.rows,
+            data: produtos,
             total,
             page,
             totalPages: Math.ceil(total / limit)
