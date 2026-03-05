@@ -47,8 +47,12 @@ export function AppSidebar() {
                 <SidebarGroup>
                     <SidebarGroupLabel>
                         <div className="flex items-center gap-2">
-                            <BarChart3 className="w-5 h-5 text-sidebar-primary" />
-                            {!collapsed && <span className="font-bold text-sm">ERP Pro</span>}
+                            <BarChart3 className="w-5 h-5 text-[hsl(221,83%,53%)]" />
+                            {!collapsed && (
+                                <span className="font-bold text-sm text-white">
+                                    ERP Pro
+                                </span>
+                            )}
                         </div>
                     </SidebarGroupLabel>
                     <SidebarGroupContent>
@@ -59,8 +63,8 @@ export function AppSidebar() {
                                         <NavLink
                                             href={item.href}
                                             exact={item.href === "/dashboard"}
-                                            className="hover:bg-sidebar-accent/50"
-                                            activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                                            className="hover:bg-[hsl(222,47%,16%)]"
+                                            activeClassName="bg-[hsl(222,47%,16%)] text-white font-medium"
                                         >
                                             <item.icon className="mr-2 h-4 w-4" />
                                             {!collapsed && <span>{item.title}</span>}
@@ -75,7 +79,7 @@ export function AppSidebar() {
             <SidebarFooter>
                 <Button
                     variant="ghost"
-                    className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent"
+                    className="w-full justify-start text-[hsl(210,40%,90%)] hover:bg-[hsl(222,47%,16%)] hover:text-white"
                     onClick={handleLogout}
                 >
                     <LogOut className="mr-2 h-4 w-4" />

@@ -44,7 +44,9 @@ export function Sidebar({ className, collapsible = 'none', children, ...props }:
     return (
         <div
             className={cn(
-                'flex h-screen flex-col border-r bg-sidebar-background text-sidebar-foreground transition-all duration-300',
+                'flex h-full flex-col border-r transition-all duration-300',
+                // CORES FIXAS - não dependem do tema
+                'bg-[hsl(222,47%,11%)] text-[hsl(210,40%,98%)] border-[hsl(222,47%,18%)]',
                 collapsed ? 'w-16' : 'w-64',
                 className
             )}
@@ -69,7 +71,11 @@ export function SidebarGroup({ className, ...props }: React.HTMLAttributes<HTMLD
 
 export function SidebarGroupLabel({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
     return (
-        <div className={cn('px-3 py-2 text-xs font-semibold text-sidebar-foreground/70', className)} {...props} />
+        <div className={cn(
+            'px-3 py-2 text-xs font-semibold',
+            'text-[hsl(210,40%,80%)]',  // Texto um pouco mais suave
+            className
+        )} {...props} />
     )
 }
 
@@ -91,7 +97,6 @@ export function SidebarMenuItem({ className, ...props }: React.HTMLAttributes<HT
     )
 }
 
-// CORRIGIDO: Usando forwardRef e Slot do Radix UI
 export const SidebarMenuButton = forwardRef<
     HTMLButtonElement,
     React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -103,7 +108,8 @@ export const SidebarMenuButton = forwardRef<
         <Comp
             ref={ref}
             className={cn(
-                'flex w-full items-center rounded-md px-3 py-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors',
+                'flex w-full items-center rounded-md px-3 py-2 text-sm transition-colors',
+                'text-[hsl(210,40%,90%)] hover:bg-[hsl(222,47%,16%)] hover:text-white',
                 className
             )}
             {...props}
@@ -117,6 +123,10 @@ SidebarMenuButton.displayName = 'SidebarMenuButton'
 
 export function SidebarFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
     return (
-        <div className={cn('mt-auto border-t border-sidebar-border p-2', className)} {...props} />
+        <div className={cn(
+            'mt-auto border-t p-2',
+            'border-[hsl(222,47%,18%)]',
+            className
+        )} {...props} />
     )
 }

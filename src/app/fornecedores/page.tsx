@@ -1,6 +1,7 @@
+// ongsys-dashboard/src/app/fornecedores/page.tsx
 'use client'
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Search, Eye, ChevronLeft, ChevronRight } from "lucide-react"
 import { Input } from "@/src/components/ui/input"
@@ -9,18 +10,31 @@ import { Badge } from "@/src/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/src/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/src/components/ui/dialog"
 import { Skeleton } from "@/src/components/ui/skeleton"
-import { SupplierView } from "@/src/lib/supplier-types"
+import { formatDocument, getDocumentType } from "@/src/lib/utils"
 
 const PAGE_SIZE = 20
 
+interface Supplier {
+    id: number
+    code: string
+    name: string
+    document: string
+    personType: 'PJ' | 'PF'
+    email: string
+    phone: string
+    city: string
+    state: string
+}
+
 export default function FornecedoresPage() {
-    const [suppliers, setSuppliers] = useState<SupplierView[]>([])
+    const [suppliers, setSuppliers] = useState<Supplier[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState("")
     const [typeFilter, setTypeFilter] = useState<string>("all")
     const [page, setPage] = useState(1)
-    const [selected, setSelected] = useState<SupplierView | null>(null)
+    const [selected, setSelected] = useState<Supplier | null>(null)
     const [totalPages, setTotalPages] = useState(1)
+    const [totalItems, setTotalItems] = useState(0)
 
     // Buscar dados da API
     useEffect(() => {
@@ -37,6 +51,7 @@ export default function FornecedoresPage() {
 
                 setSuppliers(data.data)
                 setTotalPages(data.totalPages)
+                setTotalItems(data.total)
             } catch (error) {
                 console.error('Erro ao buscar fornecedores:', error)
             } finally {
@@ -44,7 +59,6 @@ export default function FornecedoresPage() {
             }
         }
 
-        // Debounce para evitar muitas requisições
         const timer = setTimeout(() => {
             fetchSuppliers()
         }, 500)
@@ -77,7 +91,12 @@ export default function FornecedoresPage() {
             <div>
                 <h1 className="text-2xl font-bold text-foreground">Fornecedores</h1>
                 <p className="text-muted-foreground">
-                    {suppliers.length.toLocaleString("pt-BR")} fornecedores encontrados
+                    {totalItems.toLocaleString("pt-BR")} fornecedores encontrados
+                    {totalItems > PAGE_SIZE && (
+                        <span className="text-xs ml-2">
+                            (mostrando {suppliers.length} na página {page})
+                        </span>
+                    )}
                 </p>
             </div>
 
@@ -103,6 +122,25 @@ export default function FornecedoresPage() {
                 </Select>
             </div>
 
+            {/* Indicadores de filtros ativos */}
+            {(search || typeFilter !== 'all') && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                    <span>Filtros ativos:</span>
+                    {search && (
+                        <Badge variant="secondary" className="gap-1">
+                            Busca: "{search}"
+                            <button onClick={() => setSearch('')} className="ml-1 hover:text-foreground">×</button>
+                        </Badge>
+                    )}
+                    {typeFilter !== 'all' && (
+                        <Badge variant="secondary" className="gap-1">
+                            Tipo: {typeFilter === 'PJ' ? 'Pessoa Jurídica' : 'Pessoa Física'}
+                            <button onClick={() => setTypeFilter('all')} className="ml-1 hover:text-foreground">×</button>
+                        </Badge>
+                    )}
+                </div>
+            )}
+
             <div className="bg-card rounded-xl border border-border overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -118,41 +156,57 @@ export default function FornecedoresPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {suppliers.map((sup) => (
-                                <tr
-                                    key={sup.id}
-                                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                                >
-                                    <td className="p-3 font-mono text-xs text-card-foreground">{sup.code}</td>
-                                    <td className="p-3 text-card-foreground font-medium">{sup.name}</td>
-                                    <td className="p-3 text-muted-foreground hidden md:table-cell font-mono text-xs">
-                                        {sup.document}
-                                    </td>
-                                    <td className="p-3 hidden sm:table-cell">
-                                        <Badge
-                                            variant="outline"
-                                            className={
-                                                sup.personType === "PJ"
-                                                    ? "border-primary/30 text-primary"
-                                                    : "border-chart-5/30 text-chart-5"
-                                            }
-                                        >
-                                            {sup.personType === "PJ" ? "Pessoa Jurídica" : "Pessoa Física"}
-                                        </Badge>
-                                    </td>
-                                    <td className="p-3 text-muted-foreground hidden lg:table-cell">{sup.email}</td>
-                                    <td className="p-3 text-muted-foreground hidden lg:table-cell">{sup.phone}</td>
-                                    <td className="p-3 text-center">
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => setSelected(sup)}
-                                        >
-                                            <Eye className="w-4 h-4" />
-                                        </Button>
+                            {suppliers.map((sup) => {
+                                const docType = getDocumentType(sup.document)
+                                return (
+                                    <tr
+                                        key={sup.id}
+                                        className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                                    >
+                                        <td className="p-3 font-mono text-xs text-card-foreground">{sup.code}</td>
+                                        <td className="p-3 text-card-foreground font-medium">{sup.name}</td>
+                                        <td className="p-3 text-muted-foreground hidden md:table-cell font-mono text-xs">
+                                            {/* Documento com máscara */}
+                                            <div className="flex items-center gap-2">
+                                                <span>{formatDocument(sup.document)}</span>
+                                                <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                                    {docType}
+                                                </Badge>
+                                            </div>
+                                        </td>
+                                        <td className="p-3 hidden sm:table-cell">
+                                            <Badge
+                                                variant="outline"
+                                                className={
+                                                    sup.personType === "PJ"
+                                                        ? "border-primary/30 text-primary"
+                                                        : "border-chart-5/30 text-chart-5"
+                                                }
+                                            >
+                                                {sup.personType === "PJ" ? "Pessoa Jurídica" : "Pessoa Física"}
+                                            </Badge>
+                                        </td>
+                                        <td className="p-3 text-muted-foreground hidden lg:table-cell">{sup.email}</td>
+                                        <td className="p-3 text-muted-foreground hidden lg:table-cell">{sup.phone}</td>
+                                        <td className="p-3 text-center">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setSelected(sup)}
+                                            >
+                                                <Eye className="w-4 h-4" />
+                                            </Button>
+                                        </td>
+                                    </tr>
+                                )
+                            })}
+                            {suppliers.length === 0 && (
+                                <tr>
+                                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                                        Nenhum fornecedor encontrado
                                     </td>
                                 </tr>
-                            ))}
+                            )}
                         </tbody>
                     </table>
                 </div>
@@ -160,7 +214,11 @@ export default function FornecedoresPage() {
                 {/* Paginação */}
                 <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30">
                     <p className="text-sm text-muted-foreground">
-                        Página {page} de {totalPages}
+                        {totalItems > 0 ? (
+                            <>Mostrando {((page - 1) * PAGE_SIZE) + 1} - {Math.min(page * PAGE_SIZE, totalItems)} de {totalItems} fornecedores</>
+                        ) : (
+                            'Nenhum fornecedor encontrado'
+                        )}
                     </p>
                     <div className="flex gap-1">
                         <Button
@@ -201,7 +259,14 @@ export default function FornecedoresPage() {
                             </div>
                             <div className="flex justify-between py-2 border-b border-border">
                                 <span className="text-muted-foreground text-sm">Documento</span>
-                                <span className="text-card-foreground text-sm font-medium">{selected.document}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-card-foreground text-sm font-medium">
+                                        {formatDocument(selected.document)}
+                                    </span>
+                                    <Badge variant="outline" className="text-[10px]">
+                                        {getDocumentType(selected.document)}
+                                    </Badge>
+                                </div>
                             </div>
                             <div className="flex justify-between py-2 border-b border-border">
                                 <span className="text-muted-foreground text-sm">Tipo</span>
