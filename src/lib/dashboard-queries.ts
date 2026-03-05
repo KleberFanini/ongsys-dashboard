@@ -1,11 +1,10 @@
-// ongsys-dashboard/src/lib/dashboard-queries.ts
 import { query } from './db'
 import { DashboardSummary, MonthlyData, RecentAccount } from './dashboard-types'
 
 export async function getDashboardSummary(): Promise<DashboardSummary> {
-    try {
-        // 1. Buscar totais
-        const totalsResult = await query(`
+  try {
+    // 1. Buscar totais - AJUSTADO para nova estrutura de produtos
+    const totalsResult = await query(`
       WITH pagar AS (
         SELECT 
           COALESCE(COUNT(*), 0) as total_contas_pagar,
@@ -23,23 +22,23 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
       ),
       produtos AS (
         SELECT 
-          COALESCE(COUNT(*), 0) as total,
-          COALESCE(SUM(CASE WHEN estoque_atual <= estoque_minimo THEN 1 END), 0) as baixo_estoque
+          COALESCE(COUNT(*), 0) as total
+          -- Removido estoque_atual pois não existe mais
         FROM produtos
       )
       SELECT 
         fornecedores.total as total_fornecedores,
         produtos.total as total_produtos,
-        produtos.baixo_estoque as produtos_baixo_estoque,
+        0 as produtos_baixo_estoque, -- Valor fixo já que não temos estoque
         pagar.total_valor_pagar as total_pagar,
         receber.total_valor_receber as total_receber
       FROM pagar, receber, fornecedores, produtos
     `)
 
-        const totals = totalsResult.rows[0]
+    const totals = totalsResult.rows[0]
 
-        // 2. Buscar dados mensais (últimos 6 meses)
-        const monthlyResult = await query(`
+    // 2. Buscar dados mensais (últimos 6 meses)
+    const monthlyResult = await query(`
       WITH meses AS (
         SELECT 
           to_char(date_trunc('month', current_date - (n || ' months')::interval), 'YYYY-MM') as mes,
@@ -72,8 +71,8 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
       ORDER BY meses.mes
     `)
 
-        // 3. Buscar status das contas
-        const statusResult = await query(`
+    // 3. Buscar status das contas
+    const statusResult = await query(`
       SELECT 
         'Pendentes' as name,
         COUNT(*) as value,
@@ -105,8 +104,8 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
       ) contas
     `)
 
-        // 4. Buscar contas recentes
-        const recentResult = await query(`
+    // 4. Buscar contas recentes
+    const recentResult = await query(`
       (SELECT 
         id,
         codigo as code,
@@ -144,43 +143,41 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
       LIMIT 5
     `)
 
-        // Cores para o gráfico de pizza
-        const COLORS = [
-            'hsl(var(--chart-1))',
-            'hsl(var(--chart-2))',
-            'hsl(var(--chart-3))',
-            'hsl(var(--chart-4))',
-            'hsl(var(--chart-5))'
-        ]
+    // Cores para o gráfico de pizza
+    const COLORS = [
+      '#f59e0b',
+      '#ef4444',
+      '#10b981'
+    ]
 
-        return {
-            totalSuppliers: parseInt(totals.total_fornecedores) || 0,
-            totalProducts: parseInt(totals.total_produtos) || 0,
-            lowStockProducts: parseInt(totals.produtos_baixo_estoque) || 0,
-            totalPayable: parseFloat(totals.total_pagar) || 0,
-            totalReceivable: parseFloat(totals.total_receber) || 0,
-            monthlyData: monthlyResult.rows.map((row: any) => ({
-                month: row.month,
-                payable: parseFloat(row.payable) || 0,
-                receivable: parseFloat(row.receivable) || 0
-            })),
-            statusData: statusResult.rows.map((row: any, index: number) => ({
-                name: row.name,
-                value: parseInt(row.value) || 0,
-                fill: COLORS[index % COLORS.length]
-            })),
-            recentAccounts: recentResult.rows.map((row: any) => ({
-                id: row.id,
-                code: row.code || '---',
-                entityName: row.entity_name || '---',
-                dueDate: row.due_date,
-                value: parseFloat(row.value) || 0,
-                status: row.status,
-                type: row.type
-            }))
-        }
-    } catch (error) {
-        console.error('Erro ao buscar dados do dashboard:', error)
-        throw error
+    return {
+      totalSuppliers: parseInt(totals.total_fornecedores) || 0,
+      totalProducts: parseInt(totals.total_produtos) || 0,
+      lowStockProducts: 0,
+      totalPayable: parseFloat(totals.total_pagar) || 0,
+      totalReceivable: parseFloat(totals.total_receber) || 0,
+      monthlyData: monthlyResult.rows.map((row: any) => ({
+        month: row.month,
+        payable: parseFloat(row.payable) || 0,
+        receivable: parseFloat(row.receivable) || 0
+      })),
+      statusData: statusResult.rows.map((row: any, index: number) => ({
+        name: row.name,
+        value: parseInt(row.value) || 0,
+        fill: COLORS[index % COLORS.length]
+      })),
+      recentAccounts: recentResult.rows.map((row: any) => ({
+        id: row.id,
+        code: row.code || '---',
+        entityName: row.entity_name || '---',
+        dueDate: row.due_date,
+        value: parseFloat(row.value) || 0,
+        status: row.status,
+        type: row.type
+      }))
     }
+  } catch (error) {
+    console.error('Erro ao buscar dados do dashboard:', error)
+    throw error
+  }
 }
