@@ -68,42 +68,85 @@ export interface OrdersResponse {
     totalPages: number
 }
 
-// NOVAS DEFINIÇÕES PARA ETAPAS (RESTAURADAS)
 export interface EtapaInfo {
     nome: string
     descricao: string
     palavrasChave: string[]
+    ordem: number  // Para ordenar as etapas
 }
 
 export const ETAPAS: EtapaInfo[] = [
     {
         nome: 'ETAPA 01',
         descricao: 'Criação da Requisição',
-        palavrasChave: ['Criou', 'Editou']
+        palavrasChave: ['Criou', 'Editou'],
+        ordem: 1
     },
     {
         nome: 'ETAPA 02',
         descricao: 'Aprovação da Requisição',
-        palavrasChave: ['Aprovou a requisição']
+        palavrasChave: ['Aprovou a requisição'],
+        ordem: 2
     },
     {
         nome: 'ETAPA 03',
         descricao: 'Cotação',
-        palavrasChave: ['Preencheu a cotação', 'Enviou a cotação']
+        palavrasChave: ['Preencheu a cotação', 'Enviou a cotação'],
+        ordem: 3
     },
     {
         nome: 'ETAPA 04',
         descricao: 'Aprovação da Cotação',
-        palavrasChave: ['Aprovou a cotação', 'Marcou o pedido']
+        palavrasChave: ['Aprovou a cotação', 'Marcou o pedido'],
+        ordem: 4
     },
     {
         nome: 'ETAPA 05',
         descricao: 'Finalização',
-        palavrasChave: ['Encerrou']
+        palavrasChave: ['Encerrou'],
+        ordem: 5
+    },
+    {
+        nome: 'CANCELADO',
+        descricao: 'Pedidos Cancelados',
+        palavrasChave: ['Cancelou', 'Negado', 'Recusado', 'cancelamento'],
+        ordem: 6
     }
 ]
 
-// Função para identificar qual ETAPA um log pertence
+// Função para identificar a ETAPA ATUAL de um pedido
+export function identificarEtapaAtual(logs: LogPedido[]): string | null {
+    if (!logs || logs.length === 0) return null
+
+    // Ordenar logs por data (mais recente primeiro)
+    const logsOrdenados = [...logs].sort((a, b) =>
+        new Date(b.data).getTime() - new Date(a.data).getTime()
+    )
+
+    // Verificar primeiro se foi cancelado
+    for (const log of logsOrdenados) {
+        const acao = log.acao.toLowerCase()
+        const etapaCancelado = ETAPAS.find(e => e.nome === 'CANCELADO')
+        if (etapaCancelado?.palavrasChave.some(palavra => acao.includes(palavra.toLowerCase()))) {
+            return 'CANCELADO'
+        }
+    }
+
+    // Se não foi cancelado, encontrar a última etapa concluída
+    for (let i = ETAPAS.length - 2; i >= 0; i--) { // -2 para ignorar CANCELADO
+        const etapa = ETAPAS[i]
+        for (const log of logsOrdenados) {
+            const acao = log.acao.toLowerCase()
+            if (etapa.palavrasChave.some(palavra => acao.includes(palavra.toLowerCase()))) {
+                return etapa.nome
+            }
+        }
+    }
+
+    return null
+}
+
+// Função para identificar qual ETAPA um log pertence (mantida para a timeline)
 export function identificarEtapa(log: LogPedido): string | null {
     const acao = log.acao.toLowerCase()
     for (const etapa of ETAPAS) {
@@ -116,7 +159,7 @@ export function identificarEtapa(log: LogPedido): string | null {
     return null
 }
 
-// Função para agrupar logs por ETAPA
+// Função para agrupar logs por ETAPA (mantida para a timeline)
 export function agruparLogsPorEtapa(logs: LogPedido[]): Record<string, LogPedido[]> {
     const grupos: Record<string, LogPedido[]> = {}
 
@@ -138,4 +181,5 @@ export interface EtapaEstatistica {
     nome: string
     descricao: string
     quantidade: number
+    ordem: number
 }

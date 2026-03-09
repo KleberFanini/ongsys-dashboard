@@ -1,4 +1,3 @@
-// ongsys-dashboard/src/lib/dashboard-queries.ts
 import { query } from './db'
 import { DashboardSummary } from './dashboard-types'
 

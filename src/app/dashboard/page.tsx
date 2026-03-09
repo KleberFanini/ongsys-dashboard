@@ -1,4 +1,3 @@
-// ongsys-dashboard/src/app/dashboard/page.tsx
 'use client'
 
 import { useState, useEffect } from "react"

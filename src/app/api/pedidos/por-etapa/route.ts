@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/src/lib/db'
-import { identificarEtapa, ETAPAS } from '@/src/lib/order-types'
+import { identificarEtapaAtual, ETAPAS } from '@/src/lib/order-types'
 
 export async function GET(request: NextRequest) {
     try {
@@ -23,38 +23,40 @@ export async function GET(request: NextRequest) {
             ORDER BY data_pedido DESC
         `)
 
-        // Filtrar pedidos que têm logs da etapa especificada
-        const pedidosFiltrados = result.rows.filter((pedido: any) => {
-            if (etapa === 'Todas') return true
+        // Para cada pedido, identificar sua etapa atual
+        const pedidosComEtapa = result.rows.map((pedido: any) => {
+            let logs = pedido.logs
+            if (typeof logs === 'string') {
+                try {
+                    logs = JSON.parse(logs)
+                } catch {
+                    logs = []
+                }
+            }
 
-            if (!pedido.logs) return false
-
-            const logs = Array.isArray(pedido.logs)
-                ? pedido.logs
-                : JSON.parse(pedido.logs)
-
-            return logs.some((log: any) => {
-                const etapaLog = identificarEtapa(log)
-                return etapaLog === etapa
-            })
-        })
-
-        // Estatísticas por etapa
-        const estatisticas = ETAPAS.map(etapa => {
-            const count = result.rows.filter((pedido: any) => {
-                if (!pedido.logs) return false
-                const logs = Array.isArray(pedido.logs)
-                    ? pedido.logs
-                    : JSON.parse(pedido.logs)
-                return logs.some((log: any) => identificarEtapa(log) === etapa.nome)
-            }).length
+            const etapaAtual = identificarEtapaAtual(logs || [])
 
             return {
-                nome: etapa.nome,
-                descricao: etapa.descricao,
-                quantidade: count
+                ...pedido,
+                etapaAtual
             }
         })
+
+        // Filtrar por etapa se especificado
+        const pedidosFiltrados = etapa === 'Todas'
+            ? pedidosComEtapa
+            : pedidosComEtapa.filter(p => p.etapaAtual === etapa)
+
+        // Estatísticas por etapa (apenas etapa atual)
+        const estatisticas = ETAPAS.map(etapaInfo => {
+            const count = pedidosComEtapa.filter(p => p.etapaAtual === etapaInfo.nome).length
+            return {
+                nome: etapaInfo.nome,
+                descricao: etapaInfo.descricao,
+                quantidade: count,
+                ordem: etapaInfo.ordem
+            }
+        }).sort((a, b) => a.ordem - b.ordem)
 
         return NextResponse.json({
             pedidos: pedidosFiltrados,

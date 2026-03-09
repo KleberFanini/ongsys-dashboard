@@ -39,7 +39,7 @@ import {
     DropdownMenuTrigger,
 } from "@/src/components/ui/dropdown-menu"
 import { formatCurrency } from "@/src/lib/utils"
-import { ETAPAS, identificarEtapa, agruparLogsPorEtapa, type EtapaEstatistica } from "@/src/lib/order-types"
+import { ETAPAS, identificarEtapa, agruparLogsPorEtapa, identificarEtapaAtual, type EtapaEstatistica } from "@/src/lib/order-types"
 
 const PAGE_SIZE = 20
 
@@ -75,14 +75,15 @@ const getStatusColor = (status: string): string => {
     return colors[status] || 'border-muted-foreground/30 text-muted-foreground'
 }
 
-// Função para obter a cor da ETAPA
+// Função para obter a cor da ETAPA (incluindo CANCELADO)
 const getEtapaColor = (etapa: string): string => {
     const colors: Record<string, string> = {
         'ETAPA 01': 'border-blue-500 text-blue-600 bg-blue-50 dark:bg-blue-950/30',
         'ETAPA 02': 'border-green-500 text-green-600 bg-green-50 dark:bg-green-950/30',
         'ETAPA 03': 'border-yellow-500 text-yellow-600 bg-yellow-50 dark:bg-yellow-950/30',
         'ETAPA 04': 'border-purple-500 text-purple-600 bg-purple-50 dark:bg-purple-950/30',
-        'ETAPA 05': 'border-orange-500 text-orange-600 bg-orange-50 dark:bg-orange-950/30'
+        'ETAPA 05': 'border-orange-500 text-orange-600 bg-orange-50 dark:bg-orange-950/30',
+        'CANCELADO': 'border-red-500 text-red-600 bg-red-50 dark:bg-red-950/30'
     }
     return colors[etapa] || 'border-gray-500 text-gray-600 bg-gray-50 dark:bg-gray-950/30'
 }
@@ -109,6 +110,8 @@ const getLogIcon = (acao: string) => {
         return <Clock className="w-4 h-4 text-warning" />
     if (acaoLower.includes('encerrou'))
         return <CheckCircle2 className="w-4 h-4 text-success" />
+    if (acaoLower.includes('negado') || acaoLower.includes('recusado'))
+        return <XCircle className="w-4 h-4 text-destructive" />
 
     return <Clock className="w-4 h-4 text-muted-foreground" />
 }
@@ -236,6 +239,37 @@ export default function PedidosPage() {
         }
     }
 
+    // Função para identificar a etapa atual de um pedido (para exibição na tabela)
+    const getEtapaAtualDoPedido = (order: Order): string | null => {
+        if (!order.logs) return null
+
+        const logsArray = Array.isArray(order.logs) ? order.logs : [order.logs]
+
+        // Verificar cancelamento primeiro
+        for (const log of logsArray) {
+            const acao = log.acao?.toLowerCase() || ''
+            if (acao.includes('cancel') || acao.includes('negado') || acao.includes('recusado')) {
+                return 'CANCELADO'
+            }
+        }
+
+        // Se não cancelado, encontrar a última etapa (da mais avançada para a primeira)
+        const etapasOrdem = ['ETAPA 05', 'ETAPA 04', 'ETAPA 03', 'ETAPA 02', 'ETAPA 01']
+        for (const etapaNome of etapasOrdem) {
+            const etapa = ETAPAS.find(e => e.nome === etapaNome)
+            if (!etapa) continue
+
+            for (const log of logsArray) {
+                const acao = log.acao?.toLowerCase() || ''
+                if (etapa.palavrasChave.some(p => acao.includes(p.toLowerCase()))) {
+                    return etapaNome
+                }
+            }
+        }
+
+        return null
+    }
+
     if (loading && orders.length === 0) {
         return (
             <div className="space-y-4 p-6">
@@ -342,43 +376,58 @@ export default function PedidosPage() {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="Todas">Todas as Etapas</SelectItem>
-                        {etapasList.map((e) => (
-                            <SelectItem key={e.nome} value={e.nome}>
-                                {e.nome} ({e.quantidade})
-                            </SelectItem>
-                        ))}
+                        {etapasList
+                            .sort((a, b) => a.ordem - b.ordem)
+                            .map((e) => (
+                                <SelectItem key={e.nome} value={e.nome}>
+                                    <div className="flex items-center gap-2">
+                                        {e.nome === 'CANCELADO' ? (
+                                            <XCircle className="w-3 h-3 text-destructive" />
+                                        ) : (
+                                            <Flag className="w-3 h-3" />
+                                        )}
+                                        <span>{e.nome} ({e.quantidade})</span>
+                                    </div>
+                                </SelectItem>
+                            ))}
                     </SelectContent>
                 </Select>
             </div>
 
-            {/* Cards de Estatísticas de Etapas */}
+            {/* Cards de Estatísticas de Etapas - ATUALIZADO */}
             {etapasList.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                    {etapasList.map((etapaItem) => (
-                        <motion.button
-                            key={etapaItem.nome}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            onClick={() => setEtapa(etapaItem.nome)}
-                            className={`rounded-lg border p-3 text-left transition-all ${etapa === etapaItem.nome
-                                ? getEtapaColor(etapaItem.nome) + ' border-2'
-                                : 'bg-card border-border hover:border-primary/50'
-                                }`}
-                        >
-                            <div className="flex items-center justify-between mb-1">
-                                <Flag className="w-4 h-4" />
-                                <Badge variant="outline" className="text-xs">
-                                    {etapaItem.quantidade}
-                                </Badge>
-                            </div>
-                            <p className="text-sm font-medium">
-                                {etapaItem.nome}
-                            </p>
-                            <p className="text-xs opacity-80 mt-1">
-                                {etapaItem.descricao}
-                            </p>
-                        </motion.button>
-                    ))}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    {etapasList
+                        .sort((a, b) => a.ordem - b.ordem)
+                        .map((etapaItem) => (
+                            <motion.button
+                                key={etapaItem.nome}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => setEtapa(etapaItem.nome)}
+                                className={`rounded-lg border p-3 text-left transition-all ${etapa === etapaItem.nome
+                                    ? getEtapaColor(etapaItem.nome) + ' border-2'
+                                    : 'bg-card border-border hover:border-primary/50'
+                                    }`}
+                            >
+                                <div className="flex items-center justify-between mb-1">
+                                    {etapaItem.nome === 'CANCELADO' ? (
+                                        <XCircle className="w-4 h-4 text-red-500" />
+                                    ) : (
+                                        <Flag className="w-4 h-4" />
+                                    )}
+                                    <Badge variant="outline" className="text-xs">
+                                        {etapaItem.quantidade}
+                                    </Badge>
+                                </div>
+                                <p className="text-sm font-medium">
+                                    {etapaItem.nome}
+                                </p>
+                                <p className="text-xs opacity-80 mt-1 line-clamp-2">
+                                    {etapaItem.descricao}
+                                </p>
+                            </motion.button>
+                        ))}
                 </div>
             )}
 
@@ -413,7 +462,7 @@ export default function PedidosPage() {
                 </div>
             )}
 
-            {/* Tabela de pedidos */}
+            {/* Tabela de pedidos - ATUALIZADA com coluna de Etapa Atual */}
             <div className="bg-card rounded-xl border border-border overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -425,56 +474,72 @@ export default function PedidosPage() {
                                 <th className="text-left p-3 text-muted-foreground font-medium hidden lg:table-cell">Data</th>
                                 <th className="text-right p-3 text-muted-foreground font-medium hidden xl:table-cell">Valor</th>
                                 <th className="text-center p-3 text-muted-foreground font-medium">Status</th>
+                                <th className="text-center p-3 text-muted-foreground font-medium hidden lg:table-cell">Etapa Atual</th>
                                 <th className="text-center p-3 text-muted-foreground font-medium">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {orders.map((order, index) => (
-                                <motion.tr
-                                    key={order.id}
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: index * 0.03 }}
-                                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                                >
-                                    <td className="p-3 font-mono text-xs text-card-foreground">
-                                        {order.id_pedido}
-                                    </td>
-                                    <td className="p-3 text-card-foreground font-medium max-w-[200px] truncate">
-                                        {order.titulo}
-                                    </td>
-                                    <td className="p-3 hidden md:table-cell text-card-foreground">
-                                        {order.fornecedor_nome || '---'}
-                                    </td>
-                                    <td className="p-3 hidden lg:table-cell text-muted-foreground">
-                                        {order.data_pedido ? new Date(order.data_pedido).toLocaleDateString("pt-BR") : '---'}
-                                    </td>
-                                    <td className="p-3 text-right hidden xl:table-cell text-card-foreground font-medium">
-                                        {formatCurrency(order.valor_total || 0)}
-                                    </td>
-                                    <td className="p-3 text-center">
-                                        <Badge
-                                            variant="outline"
-                                            className={getStatusColor(order.status_pedido || '')}
-                                        >
-                                            {order.status_pedido || '---'}
-                                        </Badge>
-                                    </td>
-                                    <td className="p-3 text-center">
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => {
-                                                setSelectedOrder(order)
-                                                setActiveTab("detalhes")
-                                                setTimelineFilter('todos')
-                                            }}
-                                        >
-                                            <Eye className="w-4 h-4" />
-                                        </Button>
-                                    </td>
-                                </motion.tr>
-                            ))}
+                            {orders.map((order, index) => {
+                                const etapaAtual = getEtapaAtualDoPedido(order)
+                                return (
+                                    <motion.tr
+                                        key={order.id}
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: index * 0.03 }}
+                                        className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                                    >
+                                        <td className="p-3 font-mono text-xs text-card-foreground">
+                                            {order.id_pedido}
+                                        </td>
+                                        <td className="p-3 text-card-foreground font-medium max-w-[200px] truncate">
+                                            {order.titulo}
+                                        </td>
+                                        <td className="p-3 hidden md:table-cell text-card-foreground">
+                                            {order.fornecedor_nome || '---'}
+                                        </td>
+                                        <td className="p-3 hidden lg:table-cell text-muted-foreground">
+                                            {order.data_pedido ? new Date(order.data_pedido).toLocaleDateString("pt-BR") : '---'}
+                                        </td>
+                                        <td className="p-3 text-right hidden xl:table-cell text-card-foreground font-medium">
+                                            {formatCurrency(order.valor_total || 0)}
+                                        </td>
+                                        <td className="p-3 text-center">
+                                            <Badge
+                                                variant="outline"
+                                                className={getStatusColor(order.status_pedido || '')}
+                                            >
+                                                {order.status_pedido || '---'}
+                                            </Badge>
+                                        </td>
+                                        <td className="p-3 text-center hidden lg:table-cell">
+                                            {etapaAtual ? (
+                                                <Badge
+                                                    variant="outline"
+                                                    className={getEtapaColor(etapaAtual)}
+                                                >
+                                                    {etapaAtual}
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant="outline">---</Badge>
+                                            )}
+                                        </td>
+                                        <td className="p-3 text-center">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => {
+                                                    setSelectedOrder(order)
+                                                    setActiveTab("detalhes")
+                                                    setTimelineFilter('todos')
+                                                }}
+                                            >
+                                                <Eye className="w-4 h-4" />
+                                            </Button>
+                                        </td>
+                                    </motion.tr>
+                                )
+                            })}
                             {orders.length === 0 && (
                                 <tr>
                                     <td colSpan={8} className="p-8 text-center text-muted-foreground">
@@ -516,7 +581,7 @@ export default function PedidosPage() {
                 </div>
             </div>
 
-            {/* Modal de detalhes */}
+            {/* Modal de detalhes - mantido igual, já usa as funções atualizadas */}
             <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
                 <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
                     <DialogHeader>
@@ -744,7 +809,7 @@ export default function PedidosPage() {
 
                                             return (
                                                 <div className="space-y-6">
-                                                    {ETAPAS.map((etapaInfo) => {
+                                                    {ETAPAS.sort((a, b) => a.ordem - b.ordem).map((etapaInfo) => {
                                                         const logsDaEtapa = grupos[etapaInfo.nome] || []
 
                                                         if (logsDaEtapa.length === 0) return null
@@ -752,7 +817,11 @@ export default function PedidosPage() {
                                                         return (
                                                             <div key={etapaInfo.nome} className="space-y-2">
                                                                 <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border ${getEtapaColor(etapaInfo.nome)}`}>
-                                                                    <Flag className="w-3 h-3" />
+                                                                    {etapaInfo.nome === 'CANCELADO' ? (
+                                                                        <XCircle className="w-3 h-3" />
+                                                                    ) : (
+                                                                        <Flag className="w-3 h-3" />
+                                                                    )}
                                                                     <span className="text-xs font-medium">{etapaInfo.nome}</span>
                                                                     <Badge variant="outline" className="text-[10px] px-1">
                                                                         {etapaInfo.descricao}

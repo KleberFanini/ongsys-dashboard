@@ -1,12 +1,8 @@
-// ongsys-dashboard/src/lib/dashboard-types.ts
 export interface DashboardSummary {
-    // Pedidos do tipo PRODUTO
-    totalProductOrders: number        // Quantidade de pedidos do tipo Produto
-    totalProductOrdersValue: number    // Valor total dos pedidos do tipo Produto
-
-    // Pedidos do tipo SERVIÇO
-    totalServiceOrders: number         // Quantidade de pedidos do tipo Serviço
-    totalServiceOrdersValue: number    // Valor total dos pedidos do tipo Serviço
+    totalProductOrders: number
+    totalProductOrdersValue: number
+    totalServiceOrders: number
+    totalServiceOrdersValue: number
 
     totalSuppliers: number
     totalPayable: number
