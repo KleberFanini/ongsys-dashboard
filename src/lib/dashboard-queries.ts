@@ -1,43 +1,51 @@
+// ongsys-dashboard/src/lib/dashboard-queries.ts
 import { query } from './db'
-import { DashboardSummary, MonthlyData, RecentAccount } from './dashboard-types'
+import { DashboardSummary } from './dashboard-types'
 
 export async function getDashboardSummary(): Promise<DashboardSummary> {
   try {
-    // 1. Buscar totais - AJUSTADO para nova estrutura de produtos
+    // Buscar totais de produtos e pedidos
     const totalsResult = await query(`
-      WITH pagar AS (
+      WITH produtos_stats AS (
         SELECT 
-          COALESCE(COUNT(*), 0) as total_contas_pagar,
+          COALESCE(COUNT(*), 0) as total_produtos,
+          COALESCE(SUM(valorCustoBase), 0) as valor_total_produtos
+        FROM produtos
+      ),
+      pedidos_stats AS (
+        SELECT 
+          COALESCE(COUNT(*), 0) as total_pedidos,
+          COALESCE(SUM(valor_total), 0) as valor_total_pedidos
+        FROM pedidos
+      ),
+      fornecedores_stats AS (
+        SELECT COALESCE(COUNT(*), 0) as total_fornecedores
+        FROM fornecedores
+      ),
+      pagar AS (
+        SELECT 
           COALESCE(SUM(valor_liquido), 0) as total_valor_pagar
         FROM contas_pagar
       ),
       receber AS (
         SELECT 
-          COALESCE(COUNT(*), 0) as total_contas_receber,
           COALESCE(SUM(valor_liquido), 0) as total_valor_receber
         FROM contas_receber
-      ),
-      fornecedores AS (
-        SELECT COALESCE(COUNT(*), 0) as total FROM fornecedores
-      ),
-      produtos AS (
-        SELECT 
-          COALESCE(COUNT(*), 0) as total
-          -- Removido estoque_atual pois não existe mais
-        FROM produtos
       )
       SELECT 
-        fornecedores.total as total_fornecedores,
-        produtos.total as total_produtos,
-        0 as produtos_baixo_estoque, -- Valor fixo já que não temos estoque
-        pagar.total_valor_pagar as total_pagar,
-        receber.total_valor_receber as total_receber
-      FROM pagar, receber, fornecedores, produtos
+        produtos_stats.total_produtos,
+        produtos_stats.valor_total_produtos,
+        pedidos_stats.total_pedidos,
+        pedidos_stats.valor_total_pedidos,
+        fornecedores_stats.total_fornecedores,
+        pagar.total_valor_pagar,
+        receber.total_valor_receber
+      FROM produtos_stats, pedidos_stats, fornecedores_stats, pagar, receber
     `)
 
     const totals = totalsResult.rows[0]
 
-    // 2. Buscar dados mensais (últimos 6 meses)
+    // Buscar dados mensais (últimos 6 meses)
     const monthlyResult = await query(`
       WITH meses AS (
         SELECT 
@@ -71,7 +79,7 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
       ORDER BY meses.mes
     `)
 
-    // 3. NOVO: Buscar distribuição por unidade de medida
+    // Buscar distribuição por unidade de medida
     const unitMeasureResult = await query(`
       SELECT 
         COALESCE(unidadeMedida, 'Não informada') as name,
@@ -79,43 +87,10 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
       FROM produtos
       GROUP BY unidadeMedida
       ORDER BY value DESC
-      LIMIT 8  -- Limitar às 8 principais unidades
+      LIMIT 8
     `)
 
-    // 4. Buscar status das contas
-    const statusResult = await query(`
-      SELECT 
-        'Pendentes' as name,
-        COUNT(*) as value,
-        'pendente' as status
-      FROM (
-        SELECT status FROM contas_pagar WHERE status = 'pendente'
-        UNION ALL
-        SELECT status FROM contas_receber WHERE status = 'pendente'
-      ) contas
-      UNION ALL
-      SELECT 
-        'Vencidas' as name,
-        COUNT(*) as value,
-        'vencido' as status
-      FROM (
-        SELECT status FROM contas_pagar WHERE status = 'atrasado'
-        UNION ALL
-        SELECT status FROM contas_receber WHERE status = 'atrasado'
-      ) contas
-      UNION ALL
-      SELECT 
-        'Pagas/Recebidas' as name,
-        COUNT(*) as value,
-        'quitado' as status
-      FROM (
-        SELECT status FROM contas_pagar WHERE status = 'pago'
-        UNION ALL
-        SELECT status FROM contas_receber WHERE status = 'recebido'
-      ) contas
-    `)
-
-    // 5. Buscar contas recentes
+    // Buscar contas recentes
     const recentResult = await query(`
       (SELECT 
         id,
@@ -156,17 +131,16 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
 
     // Cores para o gráfico de pizza
     const COLORS = [
-      '#f59e0b',
-      '#ef4444',
-      '#10b981'
+      '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+      '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'
     ]
 
     return {
-      totalSuppliers: parseInt(totals.total_fornecedores) || 0,
       totalProducts: parseInt(totals.total_produtos) || 0,
-      lowStockProducts: 0,
-      totalPayable: parseFloat(totals.total_pagar) || 0,
-      totalReceivable: parseFloat(totals.total_receber) || 0,
+      totalProductValue: parseFloat(totals.valor_total_produtos) || 0,
+      totalOrders: parseInt(totals.total_pedidos) || 0,
+      totalOrderValue: parseFloat(totals.valor_total_pedidos) || 0,
+      totalSuppliers: parseInt(totals.total_fornecedores) || 0,
       monthlyData: monthlyResult.rows.map((row: any) => ({
         month: row.month,
         payable: parseFloat(row.payable) || 0,

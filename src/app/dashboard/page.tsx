@@ -1,8 +1,15 @@
+// ongsys-dashboard/src/app/dashboard/page.tsx
 'use client'
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { Users, Package, TrendingUp, TrendingDown } from "lucide-react"
+import {
+    Package,
+    DollarSign,
+    ShoppingCart,
+    TrendingUp,
+    Users
+} from "lucide-react"
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
     ResponsiveContainer, PieChart, Pie, Cell
@@ -14,6 +21,9 @@ import { DashboardSummary } from "@/src/lib/dashboard-types"
 
 const formatCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v)
+
+const formatNumber = (v: number) =>
+    new Intl.NumberFormat("pt-BR").format(v)
 
 export default function DashboardPage() {
     const [data, setData] = useState<DashboardSummary | null>(null)
@@ -43,11 +53,8 @@ export default function DashboardPage() {
         }
 
         checkTheme()
-
-        // Observar mudanças na classe do HTML
         const observer = new MutationObserver(checkTheme)
         observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-
         return () => observer.disconnect()
     }, [])
 
@@ -64,7 +71,6 @@ export default function DashboardPage() {
                 setLoading(false)
             }
         }
-
         fetchData()
     }, [])
 
@@ -109,31 +115,42 @@ export default function DashboardPage() {
                 <p className="text-muted-foreground">Visão geral do sistema</p>
             </div>
 
-            {/* Cards de estatísticas */}
+            {/* Cards de estatísticas - NOVA ORDEM */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. Total de Produtos */}
                 <StatCard
-                    title="Fornecedores"
-                    value={data.totalSuppliers.toLocaleString("pt-BR")}
-                    icon={Users}
-                />
-                <StatCard
-                    title="Produtos"
-                    value={data.totalProducts.toLocaleString("pt-BR")}
-                    subtitle={`${data.lowStockProducts} com estoque baixo`}
+                    title="Total de Produtos"
+                    value={formatNumber(data.totalProducts)}
+                    subtitle="Quantidade de produtos"
                     icon={Package}
-                    variant="warning"
+                    variant="default"
                 />
+
+                {/* 2. Valor Total de Produtos */}
                 <StatCard
-                    title="Contas a Pagar"
-                    value={formatCurrency(data.totalPayable)}
-                    icon={TrendingDown}
-                    variant="destructive"
-                />
-                <StatCard
-                    title="Contas a Receber"
-                    value={formatCurrency(data.totalReceivable)}
-                    icon={TrendingUp}
+                    title="Valor Total de Produtos"
+                    value={formatCurrency(data.totalProductValue)}
+                    subtitle="Soma dos preços de custo"
+                    icon={DollarSign}
                     variant="success"
+                />
+
+                {/* 3. Total de Pedidos */}
+                <StatCard
+                    title="Total de Pedidos"
+                    value={formatNumber(data.totalOrders)}
+                    subtitle="Número de pedidos"
+                    icon={ShoppingCart}
+                    variant="info"
+                />
+
+                {/* 4. Valor Total de Pedidos */}
+                <StatCard
+                    title="Valor Total de Pedidos"
+                    value={formatCurrency(data.totalOrderValue)}
+                    subtitle="Soma dos valores"
+                    icon={TrendingUp}
+                    variant="purple"
                 />
             </div>
 
@@ -253,7 +270,12 @@ export default function DashboardPage() {
                                 ))}
                             </Pie>
                             <Tooltip
-
+                                contentStyle={{
+                                    backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
+                                    border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+                                    borderRadius: '8px',
+                                    fontSize: '12px',
+                                }}
                             />
                         </PieChart>
                     </ResponsiveContainer>
@@ -276,7 +298,7 @@ export default function DashboardPage() {
                     {/* Total de produtos */}
                     <div className="mt-3 pt-3 border-t border-border text-center">
                         <p className="text-xs text-muted-foreground">
-                            Total de {data.totalProducts} produtos cadastrados
+                            Total de {formatNumber(data.totalProducts)} produtos cadastrados
                         </p>
                     </div>
                 </motion.div>

@@ -7,7 +7,7 @@ interface StatCardProps {
     value: string | number
     subtitle?: string
     icon: LucideIcon
-    variant?: "default" | "warning" | "destructive" | "success"
+    variant?: "default" | "warning" | "destructive" | "success" | "info" | "purple"
 }
 
 export function StatCard({
@@ -18,17 +18,21 @@ export function StatCard({
     variant = "default"
 }: StatCardProps) {
     const variantStyles = {
-        default: "text-primary",
+        default: "text-foreground",
         warning: "text-warning",
         destructive: "text-destructive",
-        success: "text-success"
+        success: "text-success",
+        info: "text-blue-500",
+        purple: "text-purple-500"
     }
 
     const variantBg = {
         default: "bg-primary/10",
         warning: "bg-warning/10",
         destructive: "bg-destructive/10",
-        success: "bg-success/10"
+        success: "bg-success/10",
+        info: "bg-blue-100 dark:bg-blue-950/30",
+        purple: "bg-purple-100 dark:bg-purple-950/30"
     }
 
     return (

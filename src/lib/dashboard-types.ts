@@ -1,10 +1,14 @@
 // ongsys-dashboard/src/lib/dashboard-types.ts
 export interface DashboardSummary {
-    totalSuppliers: number
     totalProducts: number
-    lowStockProducts: number
-    totalPayable: number
-    totalReceivable: number
+    totalProductValue: number
+    totalOrders: number
+    totalOrderValue: number
+    totalSuppliers: number
+    // Propriedades financeiras (opcionais, se quiser manter)
+    totalPayable?: number
+    totalReceivable?: number
+    lowStockProducts?: number
     monthlyData: MonthlyData[]
     unitMeasureData: UnitMeasureData[]
     recentAccounts: RecentAccount[]

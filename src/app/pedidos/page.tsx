@@ -1,4 +1,3 @@
-// ongsys-dashboard/src/app/pedidos/page.tsx
 'use client'
 
 import { useState, useEffect } from "react"
@@ -9,7 +8,15 @@ import {
     ChevronLeft,
     ChevronRight,
     Download,
-    Filter
+    Filter,
+    Clock,
+    CheckCircle2,
+    XCircle,
+    AlertCircle,
+    User,
+    Calendar,
+    Layers,
+    Flag
 } from "lucide-react"
 import { Input } from "@/src/components/ui/input"
 import { Button } from "@/src/components/ui/button"
@@ -32,6 +39,7 @@ import {
     DropdownMenuTrigger,
 } from "@/src/components/ui/dropdown-menu"
 import { formatCurrency } from "@/src/lib/utils"
+import { ETAPAS, identificarEtapa, agruparLogsPorEtapa, type EtapaEstatistica } from "@/src/lib/order-types"
 
 const PAGE_SIZE = 20
 
@@ -67,29 +75,77 @@ const getStatusColor = (status: string): string => {
     return colors[status] || 'border-muted-foreground/30 text-muted-foreground'
 }
 
+// Função para obter a cor da ETAPA
+const getEtapaColor = (etapa: string): string => {
+    const colors: Record<string, string> = {
+        'ETAPA 01': 'border-blue-500 text-blue-600 bg-blue-50 dark:bg-blue-950/30',
+        'ETAPA 02': 'border-green-500 text-green-600 bg-green-50 dark:bg-green-950/30',
+        'ETAPA 03': 'border-yellow-500 text-yellow-600 bg-yellow-50 dark:bg-yellow-950/30',
+        'ETAPA 04': 'border-purple-500 text-purple-600 bg-purple-50 dark:bg-purple-950/30',
+        'ETAPA 05': 'border-orange-500 text-orange-600 bg-orange-50 dark:bg-orange-950/30'
+    }
+    return colors[etapa] || 'border-gray-500 text-gray-600 bg-gray-50 dark:bg-gray-950/30'
+}
+
+// Função para obter ícone baseado na ação do log
+const getLogIcon = (acao: string) => {
+    if (!acao) return <Clock className="w-4 h-4 text-muted-foreground" />
+
+    const acaoLower = acao.toLowerCase()
+
+    if (acaoLower.includes('criou'))
+        return <CheckCircle2 className="w-4 h-4 text-blue-500" />
+    if (acaoLower.includes('aprovou'))
+        return <CheckCircle2 className="w-4 h-4 text-success" />
+    if (acaoLower.includes('enviou'))
+        return <Clock className="w-4 h-4 text-warning" />
+    if (acaoLower.includes('cancel'))
+        return <XCircle className="w-4 h-4 text-destructive" />
+    if (acaoLower.includes('finaliz'))
+        return <CheckCircle2 className="w-4 h-4 text-success" />
+    if (acaoLower.includes('gerou'))
+        return <AlertCircle className="w-4 h-4 text-blue-500" />
+    if (acaoLower.includes('marcou'))
+        return <Clock className="w-4 h-4 text-warning" />
+    if (acaoLower.includes('encerrou'))
+        return <CheckCircle2 className="w-4 h-4 text-success" />
+
+    return <Clock className="w-4 h-4 text-muted-foreground" />
+}
+
 export default function PedidosPage() {
     const [orders, setOrders] = useState<Order[]>([])
     const [statusList, setStatusList] = useState<string[]>(['todos'])
     const [tiposList, setTiposList] = useState<string[]>(['todos'])
+    const [etapasList, setEtapasList] = useState<EtapaEstatistica[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState("")
     const [status, setStatus] = useState("todos")
     const [tipo, setTipo] = useState("todos")
+    const [etapa, setEtapa] = useState("Todas")
     const [page, setPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const [totalItems, setTotalItems] = useState(0)
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
     const [exporting, setExporting] = useState(false)
     const [activeTab, setActiveTab] = useState("detalhes")
+    const [timelineFilter, setTimelineFilter] = useState<'todos' | 'etapas'>('todos')
 
-    // Buscar filtros
+    // Buscar filtros e estatísticas de etapas
     useEffect(() => {
         async function fetchFilters() {
             try {
-                const response = await fetch('/api/pedidos/filtros')
-                const data = await response.json()
-                setStatusList(['todos', ...(data.status || [])])
-                setTiposList(['todos', ...(data.tipos || [])])
+                const [filtersRes, etapasRes] = await Promise.all([
+                    fetch('/api/pedidos/filtros'),
+                    fetch('/api/pedidos/por-etapa')
+                ])
+
+                const filtersData = await filtersRes.json()
+                const etapasData = await etapasRes.json()
+
+                setStatusList(['todos', ...(filtersData.status || [])])
+                setTiposList(['todos', ...(filtersData.tipos || [])])
+                setEtapasList(etapasData.estatisticas || [])
             } catch (error) {
                 console.error('Erro ao buscar filtros:', error)
             }
@@ -102,18 +158,30 @@ export default function PedidosPage() {
         async function fetchOrders() {
             setLoading(true)
             try {
-                const params = new URLSearchParams()
-                if (search) params.append('search', search)
-                if (status !== 'todos') params.append('status', status)
-                if (tipo !== 'todos') params.append('tipo', tipo)
-                params.append('page', page.toString())
+                let url = ''
+                if (etapa !== 'Todas') {
+                    // Buscar por etapa específica
+                    url = `/api/pedidos/por-etapa?etapa=${encodeURIComponent(etapa)}`
+                    const response = await fetch(url)
+                    const data = await response.json()
+                    setOrders(data.pedidos || [])
+                    setTotalItems(data.total || 0)
+                    setTotalPages(Math.ceil((data.total || 0) / PAGE_SIZE))
+                } else {
+                    // Buscar normal com filtros
+                    const params = new URLSearchParams()
+                    if (search) params.append('search', search)
+                    if (status !== 'todos') params.append('status', status)
+                    if (tipo !== 'todos') params.append('tipo', tipo)
+                    params.append('page', page.toString())
 
-                const response = await fetch(`/api/pedidos?${params.toString()}`)
-                const data = await response.json()
+                    const response = await fetch(`/api/pedidos?${params.toString()}`)
+                    const data = await response.json()
 
-                setOrders(data.data || [])
-                setTotalPages(data.totalPages || 1)
-                setTotalItems(data.total || 0)
+                    setOrders(data.data || [])
+                    setTotalPages(data.totalPages || 1)
+                    setTotalItems(data.total || 0)
+                }
             } catch (error) {
                 console.error('Erro ao buscar pedidos:', error)
             } finally {
@@ -126,12 +194,12 @@ export default function PedidosPage() {
         }, 500)
 
         return () => clearTimeout(timer)
-    }, [search, status, tipo, page])
+    }, [search, status, tipo, etapa, page])
 
     // Resetar página quando filtros mudam
     useEffect(() => {
         setPage(1)
-    }, [search, status, tipo])
+    }, [search, status, tipo, etapa])
 
     // Função para exportar
     const handleExport = async (exportTipo: 'pagina' | 'filtro' | 'tudo') => {
@@ -142,6 +210,7 @@ export default function PedidosPage() {
                 if (search) params.append('search', search)
                 if (status !== 'todos') params.append('status', status)
                 if (tipo !== 'todos') params.append('tipo', tipo)
+                if (etapa !== 'Todas') params.append('etapa', etapa)
                 if (exportTipo === 'pagina') params.append('page', page.toString())
             }
             params.append('exportTipo', exportTipo)
@@ -173,6 +242,7 @@ export default function PedidosPage() {
                 <Skeleton className="h-8 w-48" />
                 <div className="flex gap-3">
                     <Skeleton className="h-10 flex-1 max-w-sm" />
+                    <Skeleton className="h-10 w-40" />
                     <Skeleton className="h-10 w-40" />
                     <Skeleton className="h-10 w-40" />
                     <Skeleton className="h-10 w-32" />
@@ -228,8 +298,8 @@ export default function PedidosPage() {
             </div>
 
             {/* Filtros */}
-            <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1 max-w-sm">
+            <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+                <div className="relative flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                         placeholder="Buscar por título, fornecedor ou ID..."
@@ -264,10 +334,56 @@ export default function PedidosPage() {
                         ))}
                     </SelectContent>
                 </Select>
+
+                {/* Filtro de Etapas */}
+                <Select value={etapa} onValueChange={setEtapa}>
+                    <SelectTrigger className="w-40">
+                        <SelectValue placeholder="Etapa" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Todas">Todas as Etapas</SelectItem>
+                        {etapasList.map((e) => (
+                            <SelectItem key={e.nome} value={e.nome}>
+                                {e.nome} ({e.quantidade})
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
             </div>
 
+            {/* Cards de Estatísticas de Etapas */}
+            {etapasList.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                    {etapasList.map((etapaItem) => (
+                        <motion.button
+                            key={etapaItem.nome}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => setEtapa(etapaItem.nome)}
+                            className={`rounded-lg border p-3 text-left transition-all ${etapa === etapaItem.nome
+                                ? getEtapaColor(etapaItem.nome) + ' border-2'
+                                : 'bg-card border-border hover:border-primary/50'
+                                }`}
+                        >
+                            <div className="flex items-center justify-between mb-1">
+                                <Flag className="w-4 h-4" />
+                                <Badge variant="outline" className="text-xs">
+                                    {etapaItem.quantidade}
+                                </Badge>
+                            </div>
+                            <p className="text-sm font-medium">
+                                {etapaItem.nome}
+                            </p>
+                            <p className="text-xs opacity-80 mt-1">
+                                {etapaItem.descricao}
+                            </p>
+                        </motion.button>
+                    ))}
+                </div>
+            )}
+
             {/* Indicadores de filtros ativos */}
-            {(search || status !== 'todos' || tipo !== 'todos') && (
+            {(search || status !== 'todos' || tipo !== 'todos' || etapa !== 'Todas') && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                     <span>Filtros ativos:</span>
                     {search && (
@@ -288,6 +404,12 @@ export default function PedidosPage() {
                             <button onClick={() => setTipo('todos')} className="ml-1 hover:text-foreground">×</button>
                         </Badge>
                     )}
+                    {etapa !== 'Todas' && (
+                        <Badge variant="secondary" className="gap-1">
+                            Etapa: {etapa}
+                            <button onClick={() => setEtapa('Todas')} className="ml-1 hover:text-foreground">×</button>
+                        </Badge>
+                    )}
                 </div>
             )}
 
@@ -301,7 +423,6 @@ export default function PedidosPage() {
                                 <th className="text-left p-3 text-muted-foreground font-medium">Título</th>
                                 <th className="text-left p-3 text-muted-foreground font-medium hidden md:table-cell">Fornecedor</th>
                                 <th className="text-left p-3 text-muted-foreground font-medium hidden lg:table-cell">Data</th>
-                                <th className="text-left p-3 text-muted-foreground font-medium hidden sm:table-cell">Tipo</th>
                                 <th className="text-right p-3 text-muted-foreground font-medium hidden xl:table-cell">Valor</th>
                                 <th className="text-center p-3 text-muted-foreground font-medium">Status</th>
                                 <th className="text-center p-3 text-muted-foreground font-medium">Ações</th>
@@ -328,11 +449,6 @@ export default function PedidosPage() {
                                     <td className="p-3 hidden lg:table-cell text-muted-foreground">
                                         {order.data_pedido ? new Date(order.data_pedido).toLocaleDateString("pt-BR") : '---'}
                                     </td>
-                                    <td className="p-3 hidden sm:table-cell">
-                                        <Badge variant="outline" className="text-xs">
-                                            {order.tipo_pedido || '---'}
-                                        </Badge>
-                                    </td>
                                     <td className="p-3 text-right hidden xl:table-cell text-card-foreground font-medium">
                                         {formatCurrency(order.valor_total || 0)}
                                     </td>
@@ -351,6 +467,7 @@ export default function PedidosPage() {
                                             onClick={() => {
                                                 setSelectedOrder(order)
                                                 setActiveTab("detalhes")
+                                                setTimelineFilter('todos')
                                             }}
                                         >
                                             <Eye className="w-4 h-4" />
@@ -399,7 +516,7 @@ export default function PedidosPage() {
                 </div>
             </div>
 
-            {/* Modal de detalhes - CORRIGIDO */}
+            {/* Modal de detalhes */}
             <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
                 <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
                     <DialogHeader>
@@ -410,10 +527,11 @@ export default function PedidosPage() {
 
                     {selectedOrder && (
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-                            <TabsList className="grid w-full grid-cols-3">
+                            <TabsList className="grid w-full grid-cols-4">
                                 <TabsTrigger value="detalhes">Detalhes</TabsTrigger>
                                 <TabsTrigger value="itens">Itens</TabsTrigger>
                                 <TabsTrigger value="entrega">Entrega</TabsTrigger>
+                                <TabsTrigger value="timeline">Linha do Tempo</TabsTrigger>
                             </TabsList>
 
                             <TabsContent value="detalhes" className="space-y-4 mt-4">
@@ -574,6 +692,159 @@ export default function PedidosPage() {
                                     <p className="text-center text-muted-foreground py-4">
                                         Nenhuma informação de entrega
                                     </p>
+                                )}
+                            </TabsContent>
+
+                            {/* TIMELINE COM ETAPAS */}
+                            <TabsContent value="timeline" className="space-y-4 mt-4">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h4 className="text-sm font-medium text-foreground">Histórico do Pedido</h4>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            variant={timelineFilter === 'todos' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => setTimelineFilter('todos')}
+                                            className="h-8"
+                                        >
+                                            <Layers className="w-3 h-3 mr-1" />
+                                            Todos
+                                        </Button>
+                                        <Button
+                                            variant={timelineFilter === 'etapas' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => setTimelineFilter('etapas')}
+                                            className="h-8"
+                                        >
+                                            <Flag className="w-3 h-3 mr-1" />
+                                            Por Etapas
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                {selectedOrder.logs ? (
+                                    (() => {
+                                        const logsArray = Array.isArray(selectedOrder.logs)
+                                            ? selectedOrder.logs
+                                            : [selectedOrder.logs]
+
+                                        if (logsArray.length === 0) {
+                                            return (
+                                                <div className="text-center py-8">
+                                                    <Clock className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
+                                                    <p className="text-sm text-muted-foreground">
+                                                        Nenhum log encontrado para este pedido
+                                                    </p>
+                                                </div>
+                                            )
+                                        }
+
+                                        if (timelineFilter === 'etapas') {
+                                            // Agrupar logs por etapa
+                                            const grupos = agruparLogsPorEtapa(logsArray)
+
+                                            return (
+                                                <div className="space-y-6">
+                                                    {ETAPAS.map((etapaInfo) => {
+                                                        const logsDaEtapa = grupos[etapaInfo.nome] || []
+
+                                                        if (logsDaEtapa.length === 0) return null
+
+                                                        return (
+                                                            <div key={etapaInfo.nome} className="space-y-2">
+                                                                <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border ${getEtapaColor(etapaInfo.nome)}`}>
+                                                                    <Flag className="w-3 h-3" />
+                                                                    <span className="text-xs font-medium">{etapaInfo.nome}</span>
+                                                                    <Badge variant="outline" className="text-[10px] px-1">
+                                                                        {etapaInfo.descricao}
+                                                                    </Badge>
+                                                                </div>
+
+                                                                <div className="space-y-2 pl-4">
+                                                                    {logsDaEtapa.map((log, index) => (
+                                                                        <div key={index} className="bg-muted/30 rounded-lg p-3 ml-4 border-l-2 border-primary/30">
+                                                                            <div className="flex items-start justify-between">
+                                                                                <p className="text-sm font-medium">{log.acao}</p>
+                                                                                <Badge variant="outline" className="text-[10px]">
+                                                                                    {new Date(log.data).toLocaleDateString("pt-BR")}
+                                                                                </Badge>
+                                                                            </div>
+                                                                            <p className="text-xs text-muted-foreground mt-1">
+                                                                                {log.autor}
+                                                                            </p>
+                                                                            {log.comentarios && (
+                                                                                <p className="text-xs text-muted-foreground mt-1 italic">
+                                                                                    "{log.comentarios}"
+                                                                                </p>
+                                                                            )}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )
+                                                    })}
+                                                </div>
+                                            )
+                                        } else {
+                                            // Visualização normal (todos os logs em ordem cronológica)
+                                            return (
+                                                <div className="relative">
+                                                    <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
+
+                                                    <div className="space-y-4">
+                                                        {logsArray.map((log: any, index: number) => (
+                                                            <motion.div
+                                                                key={index}
+                                                                initial={{ opacity: 0, x: -20 }}
+                                                                animate={{ opacity: 1, x: 0 }}
+                                                                transition={{ delay: index * 0.05 }}
+                                                                className="relative flex gap-4 pl-10"
+                                                            >
+                                                                <div className="absolute left-0 w-8 h-8 rounded-full bg-card border-2 border-border flex items-center justify-center">
+                                                                    {getLogIcon(log.acao || '')}
+                                                                </div>
+
+                                                                <div className="flex-1 bg-muted/30 rounded-lg p-3">
+                                                                    <div className="flex items-center justify-between mb-2">
+                                                                        <p className="text-sm font-medium text-card-foreground">
+                                                                            {log.acao || 'Ação desconhecida'}
+                                                                        </p>
+                                                                        <Badge variant="outline" className="text-[10px]">
+                                                                            <Calendar className="w-3 h-3 mr-1" />
+                                                                            {log.data ? new Date(log.data).toLocaleDateString("pt-BR") : '---'}
+                                                                        </Badge>
+                                                                    </div>
+
+                                                                    <div className="flex items-center text-xs text-muted-foreground">
+                                                                        <User className="w-3 h-3 mr-1" />
+                                                                        {log.autor || 'Autor não informado'}
+                                                                    </div>
+
+                                                                    {log.comentarios && (
+                                                                        <p className="text-xs text-muted-foreground mt-2 italic">
+                                                                            "{log.comentarios}"
+                                                                        </p>
+                                                                    )}
+
+                                                                    {log.data && (
+                                                                        <p className="text-[10px] text-muted-foreground mt-2">
+                                                                            {new Date(log.data).toLocaleTimeString("pt-BR")}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            </motion.div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )
+                                        }
+                                    })()
+                                ) : (
+                                    <div className="text-center py-8">
+                                        <Clock className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
+                                        <p className="text-sm text-muted-foreground">
+                                            Nenhum log encontrado para este pedido
+                                        </p>
+                                    </div>
                                 )}
                             </TabsContent>
                         </Tabs>
