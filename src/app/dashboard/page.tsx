@@ -7,8 +7,10 @@ import {
     Package,
     DollarSign,
     ShoppingCart,
+    Briefcase,
     TrendingUp,
-    Users
+    Users,
+    AlertTriangle
 } from "lucide-react"
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -115,40 +117,40 @@ export default function DashboardPage() {
                 <p className="text-muted-foreground">Visão geral do sistema</p>
             </div>
 
-            {/* Cards de estatísticas - NOVA ORDEM */}
+            {/* Cards de estatísticas - PRODUTOS vs SERVIÇOS */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* 1. Total de Produtos */}
+                {/* 1. Total de Pedidos do Tipo PRODUTO */}
                 <StatCard
-                    title="Total de Produtos"
-                    value={formatNumber(data.totalProducts)}
-                    subtitle="Quantidade de produtos"
+                    title="Total Pedidos (Produto)"
+                    value={formatNumber(data.totalProductOrders)}
+                    subtitle="Quantidade de pedidos de produto"
                     icon={Package}
                     variant="default"
                 />
 
-                {/* 2. Valor Total de Produtos */}
+                {/* 2. Valor Total de Pedidos do Tipo PRODUTO */}
                 <StatCard
-                    title="Valor Total de Produtos"
-                    value={formatCurrency(data.totalProductValue)}
-                    subtitle="Soma dos preços de custo"
+                    title="Valor Total (Produto)"
+                    value={formatCurrency(data.totalProductOrdersValue)}
+                    subtitle="Soma dos valores de pedidos de produto"
                     icon={DollarSign}
                     variant="success"
                 />
 
-                {/* 3. Total de Pedidos */}
+                {/* 3. Total de Pedidos do Tipo SERVIÇO */}
                 <StatCard
-                    title="Total de Pedidos"
-                    value={formatNumber(data.totalOrders)}
-                    subtitle="Número de pedidos"
-                    icon={ShoppingCart}
+                    title="Total Pedidos (Serviço)"
+                    value={formatNumber(data.totalServiceOrders)}
+                    subtitle="Quantidade de pedidos de serviço"
+                    icon={Briefcase}
                     variant="info"
                 />
 
-                {/* 4. Valor Total de Pedidos */}
+                {/* 4. Valor Total de Pedidos do Tipo SERVIÇO */}
                 <StatCard
-                    title="Valor Total de Pedidos"
-                    value={formatCurrency(data.totalOrderValue)}
-                    subtitle="Soma dos valores"
+                    title="Valor Total (Serviço)"
+                    value={formatCurrency(data.totalServiceOrdersValue)}
+                    subtitle="Soma dos valores de pedidos de serviço"
                     icon={TrendingUp}
                     variant="purple"
                 />
@@ -293,13 +295,6 @@ export default function DashboardPage() {
                                 </span>
                             </div>
                         ))}
-                    </div>
-
-                    {/* Total de produtos */}
-                    <div className="mt-3 pt-3 border-t border-border text-center">
-                        <p className="text-xs text-muted-foreground">
-                            Total de {formatNumber(data.totalProducts)} produtos cadastrados
-                        </p>
                     </div>
                 </motion.div>
             </div>

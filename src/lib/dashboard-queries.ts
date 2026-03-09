@@ -4,19 +4,21 @@ import { DashboardSummary } from './dashboard-types'
 
 export async function getDashboardSummary(): Promise<DashboardSummary> {
   try {
-    // Buscar totais de produtos e pedidos
+    // Buscar totais de pedidos por tipo (Produto vs Serviço)
     const totalsResult = await query(`
-      WITH produtos_stats AS (
+      WITH produtos_pedidos AS (
         SELECT 
-          COALESCE(COUNT(*), 0) as total_produtos,
-          COALESCE(SUM(valorCustoBase), 0) as valor_total_produtos
-        FROM produtos
-      ),
-      pedidos_stats AS (
-        SELECT 
-          COALESCE(COUNT(*), 0) as total_pedidos,
-          COALESCE(SUM(valor_total), 0) as valor_total_pedidos
+          COALESCE(COUNT(*), 0) as total_pedidos_produto,
+          COALESCE(SUM(valor_total), 0) as valor_total_produtos
         FROM pedidos
+        WHERE LOWER(tipo_pedido) = 'produto'
+      ),
+      servicos_pedidos AS (
+        SELECT 
+          COALESCE(COUNT(*), 0) as total_pedidos_servico,
+          COALESCE(SUM(valor_total), 0) as valor_total_servicos
+        FROM pedidos
+        WHERE LOWER(tipo_pedido) = 'serviço' OR LOWER(tipo_pedido) = 'servico'
       ),
       fornecedores_stats AS (
         SELECT COALESCE(COUNT(*), 0) as total_fornecedores
@@ -33,14 +35,17 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
         FROM contas_receber
       )
       SELECT 
-        produtos_stats.total_produtos,
-        produtos_stats.valor_total_produtos,
-        pedidos_stats.total_pedidos,
-        pedidos_stats.valor_total_pedidos,
+        produtos_pedidos.total_pedidos_produto,
+        produtos_pedidos.valor_total_produtos,
+        servicos_pedidos.total_pedidos_servico,
+        servicos_pedidos.valor_total_servicos,
         fornecedores_stats.total_fornecedores,
         pagar.total_valor_pagar,
-        receber.total_valor_receber
-      FROM produtos_stats, pedidos_stats, fornecedores_stats, pagar, receber
+        receber.total_valor_receber,
+        0 as total_baixo_estoque
+      FROM fornecedores_stats, pagar, receber
+      CROSS JOIN produtos_pedidos
+      CROSS JOIN servicos_pedidos
     `)
 
     const totals = totalsResult.rows[0]
@@ -129,18 +134,26 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
       LIMIT 5
     `)
 
-    // Cores para o gráfico de pizza
     const COLORS = [
       '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
       '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'
     ]
 
     return {
-      totalProducts: parseInt(totals.total_produtos) || 0,
-      totalProductValue: parseFloat(totals.valor_total_produtos) || 0,
-      totalOrders: parseInt(totals.total_pedidos) || 0,
-      totalOrderValue: parseFloat(totals.valor_total_pedidos) || 0,
+      // Pedidos do tipo PRODUTO
+      totalProductOrders: parseInt(totals.total_pedidos_produto) || 0,
+      totalProductOrdersValue: parseFloat(totals.valor_total_produtos) || 0,
+
+      // Pedidos do tipo SERVIÇO
+      totalServiceOrders: parseInt(totals.total_pedidos_servico) || 0,
+      totalServiceOrdersValue: parseFloat(totals.valor_total_servicos) || 0,
+
+      // Outros
       totalSuppliers: parseInt(totals.total_fornecedores) || 0,
+      totalPayable: parseFloat(totals.total_valor_pagar) || 0,
+      totalReceivable: parseFloat(totals.total_valor_receber) || 0,
+      lowStockProducts: 0,
+
       monthlyData: monthlyResult.rows.map((row: any) => ({
         month: row.month,
         payable: parseFloat(row.payable) || 0,
