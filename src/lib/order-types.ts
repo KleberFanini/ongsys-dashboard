@@ -97,13 +97,19 @@ export const ETAPAS: EtapaInfo[] = [
     {
         nome: 'ETAPA 04',
         descricao: 'Aprovação da Cotação',
-        palavrasChave: ['Aprovou a cotação', 'Marcou o pedido'],
+        palavrasChave: [
+            'Aprovou a cotação',
+            'Aprovou a cotação.',
+            'Marcou o pedido',
+            'Gerou pedido',
+            'Gerou pedido(s)'
+        ],
         ordem: 4
     },
     {
         nome: 'ETAPA 05',
         descricao: 'Finalização',
-        palavrasChave: ['Encerrou'],
+        palavrasChave: ['Encerrou', 'Finalizou'],
         ordem: 5
     },
     {
@@ -182,4 +188,145 @@ export interface EtapaEstatistica {
     descricao: string
     quantidade: number
     ordem: number
+}
+
+// Função para calcular a diferença entre duas datas em horas/dias
+export function formatarTempo(ms: number): string {
+    const horas = ms / (1000 * 60 * 60)
+
+    if (horas < 1) {
+        const minutos = Math.round(horas * 60)
+        return `${minutos}m`
+    }
+
+    if (horas < 24) {
+        return `${Math.round(horas)}h`
+    } else {
+        const dias = horas / 24
+        return `${dias.toFixed(1)}d`
+    }
+}
+
+// Função para calcular o tempo gasto em uma etapa para um pedido
+export function calcularTempoEtapa(logs: LogPedido[], etapaNome: string, pedidoId?: string): number | null {
+    // ETAPAS 05 e CANCELADO não têm tempo médio
+    if (etapaNome === 'ETAPA 05' || etapaNome === 'CANCELADO') {
+        return null
+    }
+
+    // Encontrar a etapa correspondente
+    const etapa = ETAPAS.find(e => e.nome === etapaNome)
+    if (!etapa) return null
+
+    // Filtrar logs que pertencem a esta etapa (case insensitive)
+    const logsEtapa = logs
+        .filter(log => {
+            if (!log.acao) return false
+            const acao = log.acao.toLowerCase()
+            return etapa.palavrasChave.some(p => {
+                const palavraLower = p.toLowerCase()
+                const match = acao.includes(palavraLower)
+                if (match && pedidoId) {
+                    console.log(`✅ Pedido ${pedidoId} - Match ETAPA ${etapaNome}: "${log.acao}" com palavra-chave "${p}"`)
+                }
+                return match
+            })
+        })
+        .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
+
+    // Se não tem logs na etapa, não entrou nela ainda
+    if (logsEtapa.length === 0) {
+        if (pedidoId) {
+            console.log(`❌ Pedido ${pedidoId} - Sem logs para ETAPA ${etapaNome}`)
+        }
+        return null
+    }
+
+    // Pega o primeiro log da etapa (início)
+    const dataInicio = new Date(logsEtapa[0].data).getTime()
+    const dataInicioStr = new Date(dataInicio).toLocaleString('pt-BR')
+
+    // Encontrar o índice do ÚLTIMO log desta etapa no array completo de logs
+    const ultimoLogDaEtapa = logsEtapa[logsEtapa.length - 1]
+    const indexUltimoLog = logs.findIndex(log => log === ultimoLogDaEtapa)
+
+    // Verificar se existe um próximo log (qualquer etapa) após o último log desta etapa
+    const existeProximoLog = indexUltimoLog !== -1 && indexUltimoLog < logs.length - 1
+
+    // Calcular a data de fim
+    let dataFim: number
+    let tipo: string
+
+    if (existeProximoLog) {
+        // Já passou para outra etapa - usa o próximo log como fim
+        const proximoLog = logs[indexUltimoLog + 1]
+        dataFim = new Date(proximoLog.data).getTime()
+        tipo = 'CONCLUÍDO'
+    } else {
+        // Ainda está nesta etapa - usa a data atual
+        dataFim = Date.now()
+        tipo = 'EM ANDAMENTO'
+    }
+
+    const dataFimStr = new Date(dataFim).toLocaleString('pt-BR')
+    const diferenca = dataFim - dataInicio
+
+    // Log para debug
+    if (pedidoId) {
+        console.log(`📊 Pedido ${pedidoId} - ${etapaNome}:`, {
+            tipo,
+            logsNaEtapa: logsEtapa.length,
+            inicio: dataInicioStr,
+            fim: dataFimStr,
+            diferenca: formatarTempo(diferenca),
+            ms: diferenca,
+            palavrasChave: etapa.palavrasChave
+        })
+    }
+
+    return diferenca
+}
+
+// Função para calcular a média de tempo de uma etapa considerando todos os pedidos
+export function calcularMediaTempoEtapa(pedidos: Order[], etapaNome: string): string {
+    // ETAPAS 05 e CANCELADO não têm média
+    if (etapaNome === 'ETAPA 05' || etapaNome === 'CANCELADO') {
+        return '-'
+    }
+
+    const tempos: number[] = []
+    console.log(`\n🔍 Calculando média para ${etapaNome} com ${pedidos.length} pedidos`)
+    console.log(`📝 Palavras-chave para ${etapaNome}:`, ETAPAS.find(e => e.nome === etapaNome)?.palavrasChave)
+
+    pedidos.forEach((pedido, index) => {
+        if (!pedido.logs) return
+
+        const logsArray = Array.isArray(pedido.logs) ? pedido.logs : [pedido.logs]
+
+        // Mostrar logs para os primeiros 5 pedidos para debug
+        const mostrarLog = index < 5
+        const tempo = calcularTempoEtapa(logsArray, etapaNome, mostrarLog ? pedido.id_pedido : undefined)
+
+        if (tempo !== null) {
+            tempos.push(tempo)
+        }
+    })
+
+    if (tempos.length === 0) {
+        console.log(`❌ ${etapaNome}: nenhum tempo válido encontrado`)
+        return '-'
+    }
+
+    const soma = tempos.reduce((a, b) => a + b, 0)
+    const media = soma / tempos.length
+    const resultado = formatarTempo(media)
+
+    console.log(`✅ ${etapaNome}:`, {
+        totalTempos: tempos.length,
+        soma: formatarTempo(soma),
+        media: resultado,
+        mediaMs: media
+    })
+
+    return resultado
 }

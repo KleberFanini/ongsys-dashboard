@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { motion } from "framer-motion"
 import {
     Search,
@@ -39,7 +39,7 @@ import {
     DropdownMenuTrigger,
 } from "@/src/components/ui/dropdown-menu"
 import { formatCurrency } from "@/src/lib/utils"
-import { ETAPAS, identificarEtapa, agruparLogsPorEtapa, identificarEtapaAtual, type EtapaEstatistica } from "@/src/lib/order-types"
+import { ETAPAS, identificarEtapa, agruparLogsPorEtapa, identificarEtapaAtual, calcularMediaTempoEtapa, type EtapaEstatistica } from "@/src/lib/order-types"
 
 const PAGE_SIZE = 20
 
@@ -133,6 +133,60 @@ export default function PedidosPage() {
     const [exporting, setExporting] = useState(false)
     const [activeTab, setActiveTab] = useState("detalhes")
     const [timelineFilter, setTimelineFilter] = useState<'todos' | 'etapas'>('todos')
+    const [allOrders, setAllOrders] = useState<Order[]>([])
+    const [updateTrigger, setUpdateTrigger] = useState(0)
+
+    // Buscar TODOS os pedidos uma única vez
+    useEffect(() => {
+        async function fetchAllOrders() {
+            try {
+                const response = await fetch('/api/pedidos?page=1&limit=10000')
+                const data = await response.json()
+                setAllOrders(data.data || [])
+            } catch (error) {
+                console.error('Erro ao buscar todos os pedidos:', error)
+            }
+        }
+        fetchAllOrders()
+    }, [])
+
+    // Efeito para atualizar as médias a cada minuto
+    useEffect(() => {
+        console.log('🔄 Iniciando atualização automática das médias')
+        const interval = setInterval(() => {
+            setUpdateTrigger(prev => {
+                const novo = prev + 1
+                console.log('🔄 Atualizando médias...', new Date().toLocaleTimeString(), 'trigger:', novo)
+                return novo
+            })
+        }, 10000) // 10 segundos para teste
+
+        return () => {
+            console.log('🛑 Parando atualização automática')
+            clearInterval(interval)
+        }
+    }, [])
+
+    // Função para calcular médias usando TODOS os pedidos
+    const mediasGlobais = useMemo(() => {
+        if (!allOrders || allOrders.length === 0) {
+            console.log('⏳ Aguardando allOrders...')
+            return {}
+        }
+
+        console.log('📊 Recalculando médias com', allOrders.length, 'pedidos - trigger:', updateTrigger)
+        const startTime = Date.now()
+
+        const medias: Record<string, string> = {}
+        ETAPAS.forEach(etapa => {
+            medias[etapa.nome] = calcularMediaTempoEtapa(allOrders, etapa.nome)
+        })
+
+        const endTime = Date.now()
+        console.log('✅ Médias recalculadas em', (endTime - startTime) / 1000, 'segundos')
+
+        return medias
+    }, [allOrders, updateTrigger])
 
     // Buscar filtros e estatísticas de etapas
     useEffect(() => {
@@ -394,43 +448,71 @@ export default function PedidosPage() {
                 </Select>
             </div>
 
-            {/* Cards de Estatísticas de Etapas - ATUALIZADO */}
+            {/* Cards de Estatísticas de Etapas */}
             {etapasList.length > 0 && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                     {etapasList
                         .sort((a, b) => a.ordem - b.ordem)
-                        .map((etapaItem) => (
-                            <motion.button
-                                key={etapaItem.nome}
-                                whileHover={{ scale: 1.02 }}
-                                whileTap={{ scale: 0.98 }}
-                                onClick={() => setEtapa(etapaItem.nome)}
-                                className={`rounded-lg border p-3 text-left transition-all ${etapa === etapaItem.nome
-                                    ? getEtapaColor(etapaItem.nome) + ' border-2'
-                                    : 'bg-card border-border hover:border-primary/50'
-                                    }`}
-                            >
-                                <div className="flex items-center justify-between mb-1">
-                                    {etapaItem.nome === 'CANCELADO' ? (
-                                        <XCircle className="w-4 h-4 text-red-500" />
-                                    ) : (
-                                        <Flag className="w-4 h-4" />
+                        .map((etapaItem) => {
+                            const isFinal = etapaItem.nome === 'ETAPA 05' || etapaItem.nome === 'CANCELADO'
+
+                            return (
+                                <motion.button
+                                    key={etapaItem.nome}
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => setEtapa(etapaItem.nome)}
+                                    className={`rounded-lg border p-3 text-left transition-all ${etapa === etapaItem.nome
+                                        ? getEtapaColor(etapaItem.nome) + ' border-2'
+                                        : 'bg-card border-border hover:border-primary/50'
+                                        }`}
+                                >
+                                    <div className="flex items-center justify-between mb-1">
+                                        {etapaItem.nome === 'CANCELADO' ? (
+                                            <XCircle className="w-4 h-4 text-red-500" />
+                                        ) : (
+                                            <Flag className="w-4 h-4" />
+                                        )}
+                                        <Badge variant="outline" className="text-xs">
+                                            {etapaItem.quantidade}
+                                        </Badge>
+                                    </div>
+
+                                    <p className="text-sm font-medium">
+                                        {etapaItem.nome}
+                                    </p>
+
+                                    <p className="text-xs opacity-80 mt-1 line-clamp-2">
+                                        {etapaItem.descricao}
+                                    </p>
+
+                                    {/* Mostrar tempo médio apenas para etapas não finais */}
+                                    {!isFinal && mediasGlobais[etapaItem.nome] && mediasGlobais[etapaItem.nome] !== '-' && (
+                                        <div className="mt-2 pt-2 border-t border-border/50">
+                                            <div className="flex items-center justify-between text-[10px]">
+                                                <span className="text-muted-foreground">Tempo médio:</span>
+                                                <span className="font-mono font-medium">
+                                                    {mediasGlobais[etapaItem.nome]}
+                                                </span>
+                                            </div>
+                                        </div>
                                     )}
-                                    <Badge variant="outline" className="text-xs">
-                                        {etapaItem.quantidade}
-                                    </Badge>
-                                </div>
-                                <p className="text-sm font-medium">
-                                    {etapaItem.nome}
-                                </p>
-                                <p className="text-xs opacity-80 mt-1 line-clamp-2">
-                                    {etapaItem.descricao}
-                                </p>
-                            </motion.button>
-                        ))}
+
+                                    {/* Para etapas finais, mostrar mensagem */}
+                                    {isFinal && (
+                                        <div className="mt-2 pt-2 border-t border-border/50">
+                                            <p className="text-[10px] text-muted-foreground text-center">
+                                                {etapaItem.nome === 'CANCELADO'
+                                                    ? 'Pedidos cancelados'
+                                                    : 'Etapa final'}
+                                            </p>
+                                        </div>
+                                    )}
+                                </motion.button>
+                            )
+                        })}
                 </div>
             )}
-
             {/* Indicadores de filtros ativos */}
             {(search || status !== 'todos' || tipo !== 'todos' || etapa !== 'Todas') && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
