@@ -1,6 +1,9 @@
 export interface DashboardSummary {
+    // Pedidos do tipo PRODUTO
     totalProductOrders: number
     totalProductOrdersValue: number
+
+    // Pedidos do tipo SERVIÇO
     totalServiceOrders: number
     totalServiceOrdersValue: number
 
@@ -33,4 +36,9 @@ export interface RecentAccount {
     value: number
     status: 'paid' | 'pending' | 'overdue'
     type: 'payable' | 'receivable'
+}
+
+export interface DateFilter {
+    startDate?: string
+    endDate?: string
 }

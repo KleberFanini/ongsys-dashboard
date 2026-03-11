@@ -1,3 +1,4 @@
+// ongsys-dashboard/src/app/dashboard/page.tsx
 'use client'
 
 import { useState, useEffect } from "react"
@@ -8,8 +9,9 @@ import {
     ShoppingCart,
     Briefcase,
     TrendingUp,
-    Users,
-    AlertTriangle
+    Calendar,
+    Filter,
+    X
 } from "lucide-react"
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -18,6 +20,8 @@ import {
 import { StatCard } from "@/src/components/StatCard"
 import { Skeleton } from "@/src/components/ui/skeleton"
 import { Badge } from "@/src/components/ui/badge"
+import { Button } from "@/src/components/ui/button"
+import { Input } from "@/src/components/ui/input"
 import { DashboardSummary } from "@/src/lib/dashboard-types"
 
 const formatCurrency = (v: number) =>
@@ -31,6 +35,11 @@ export default function DashboardPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [isDarkMode, setIsDarkMode] = useState(false)
+
+    // Estados para filtro de data
+    const [startDate, setStartDate] = useState('')
+    const [endDate, setEndDate] = useState('')
+    const [showDateFilter, setShowDateFilter] = useState(false)
 
     const getUnitColor = (unit: string): string => {
         const colors: Record<string, string> = {
@@ -59,23 +68,50 @@ export default function DashboardPage() {
         return () => observer.disconnect()
     }, [])
 
-    useEffect(() => {
-        async function fetchData() {
-            try {
-                const response = await fetch('/api/dashboard')
-                if (!response.ok) throw new Error('Erro ao carregar dados')
-                const json = await response.json()
-                setData(json)
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'Erro desconhecido')
-            } finally {
-                setLoading(false)
-            }
-        }
-        fetchData()
-    }, [])
+    // Função para buscar dados com filtros
+    const fetchData = async () => {
+        setLoading(true)
+        try {
+            const params = new URLSearchParams()
+            if (startDate) params.append('startDate', startDate)
+            if (endDate) params.append('endDate', endDate)
 
-    if (loading) {
+            console.log('🔍 Buscando dados com filtros:', { startDate, endDate })
+
+            const response = await fetch(`/api/dashboard?${params.toString()}`)
+            if (!response.ok) throw new Error('Erro ao carregar dados')
+            const json = await response.json()
+            setData(json)
+            console.log('✅ Dados atualizados:', json)
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Erro desconhecido')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    // Buscar dados quando os filtros mudarem
+    useEffect(() => {
+        fetchData()
+    }, [startDate, endDate])
+
+    // Aplicar filtro de data
+    const handleApplyFilter = () => {
+        if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+            alert('Data inicial não pode ser maior que data final')
+            return
+        }
+        setShowDateFilter(false)
+    }
+
+    // Limpar filtro de data
+    const handleClearFilter = () => {
+        setStartDate('')
+        setEndDate('')
+        setShowDateFilter(false)
+    }
+
+    if (loading && !data) {
         return (
             <div className="space-y-6 p-6">
                 <div>
@@ -111,47 +147,121 @@ export default function DashboardPage() {
 
     return (
         <div className="space-y-6 animate-fade-in p-6">
-            <div>
-                <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-                <p className="text-muted-foreground">Visão geral do sistema</p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+                    <p className="text-muted-foreground">Visão geral do sistema</p>
+                </div>
+
+                {/* Botão de filtro de data */}
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowDateFilter(!showDateFilter)}
+                        className="flex items-center gap-2"
+                    >
+                        <Calendar className="w-4 h-4 text-foreground" />
+                        {startDate && endDate ? (
+                            <span>Filtro ativo: {new Date(startDate).toLocaleDateString('pt-BR')} - {new Date(endDate).toLocaleDateString('pt-BR')}</span>
+                        ) : (
+                            <span>Filtrar por período</span>
+                        )}
+                    </Button>
+
+                    {startDate && endDate && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleClearFilter}
+                            className="text-muted-foreground"
+                        >
+                            <X className="w-4 h-4 text-foreground" />
+                        </Button>
+                    )}
+                </div>
             </div>
 
-            {/* Cards de estatísticas - PRODUTOS vs SERVIÇOS */}
+            {/* Painel de filtro de data */}
+            {showDateFilter && (
+                <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-card border rounded-lg p-4 mb-4"
+                >
+                    <h3 className="text-sm font-medium mb-3">Filtrar por período</h3>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="flex-1">
+                            <label className="text-xs text-muted-foreground mb-1 block">Data inicial</label>
+                            <Input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="w-full  text-foreground"
+                            />
+                        </div>
+                        <div className="flex-1">
+                            <label className="text-xs text-muted-foreground mb-1 block">Data final</label>
+                            <Input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                className="w-full"
+                            />
+                        </div>
+                        <div className="flex items-end gap-2">
+                            <Button onClick={handleApplyFilter} className="h-10">
+                                <Filter className="w-4 h-4 mr-2" />
+                                Aplicar
+                            </Button>
+                            <Button variant="ghost" onClick={() => setShowDateFilter(false)} className="h-10">
+                                Cancelar
+                            </Button>
+                        </div>
+                    </div>
+                </motion.div>
+            )}
+
+            {/* Indicador de filtro ativo */}
+            {startDate && endDate && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground bg-primary/5 p-2 rounded-lg">
+                    <Calendar className="w-4 h-4 text-foreground" />
+                    <span>Mostrando dados de <strong>{new Date(startDate).toLocaleDateString('pt-BR')}</strong> até <strong>{new Date(endDate).toLocaleDateString('pt-BR')}</strong></span>
+                </div>
+            )}
+
+            {/* Cards de estatísticas */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* 1. Total de Pedidos do Tipo PRODUTO */}
                 <StatCard
-                    title="Total Pedidos (Produto)"
+                    title="Total de Produtos por Pedido"
                     value={formatNumber(data.totalProductOrders)}
                     subtitle="Quantidade de pedidos de produto"
                     icon={Package}
-                    variant="default"
+                    variant="info"
                 />
 
-                {/* 2. Valor Total de Pedidos do Tipo PRODUTO */}
                 <StatCard
-                    title="Valor Total (Produto)"
+                    title="Valor Total dos Produtos por Pedido"
                     value={formatCurrency(data.totalProductOrdersValue)}
                     subtitle="Soma dos valores de pedidos de produto"
                     icon={DollarSign}
                     variant="success"
                 />
 
-                {/* 3. Total de Pedidos do Tipo SERVIÇO */}
                 <StatCard
-                    title="Total Pedidos (Serviço)"
+                    title="Total de Serviços por Pedido"
                     value={formatNumber(data.totalServiceOrders)}
                     subtitle="Quantidade de pedidos de serviço"
                     icon={Briefcase}
                     variant="info"
                 />
 
-                {/* 4. Valor Total de Pedidos do Tipo SERVIÇO */}
                 <StatCard
-                    title="Valor Total (Serviço)"
+                    title="Valor Total de Serviços por Pedido"
                     value={formatCurrency(data.totalServiceOrdersValue)}
                     subtitle="Soma dos valores de pedidos de serviço"
-                    icon={TrendingUp}
-                    variant="purple"
+                    icon={DollarSign}
+                    variant="success"
                 />
             </div>
 
@@ -295,75 +405,15 @@ export default function DashboardPage() {
                             </div>
                         ))}
                     </div>
+
+                    {/* Total de produtos */}
+                    <div className="mt-3 pt-3 border-t border-border text-center">
+                        <p className="text-xs text-muted-foreground">
+                            Total de {formatNumber(data.unitMeasureData.reduce((acc, curr) => acc + curr.value, 0))} produtos cadastrados
+                        </p>
+                    </div>
                 </motion.div>
             </div>
-
-            {/* Tabela de contas recentes */}
-            <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-                className="bg-card rounded-xl border p-5"
-            >
-                <h3 className="font-semibold text-card-foreground mb-4">Contas Recentes</h3>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                        <thead>
-                            <tr className="border-b text-left">
-                                <th className="pb-3 text-muted-foreground font-medium">Código</th>
-                                <th className="pb-3 text-muted-foreground font-medium">Entidade</th>
-                                <th className="pb-3 text-muted-foreground font-medium">Vencimento</th>
-                                <th className="pb-3 text-muted-foreground font-medium">Valor</th>
-                                <th className="pb-3 text-muted-foreground font-medium">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {data.recentAccounts.map((account) => (
-                                <tr key={`${account.type}-${account.id}`} className="border-b last:border-0">
-                                    <td className="py-3 text-card-foreground font-mono text-xs">
-                                        {account.code}
-                                    </td>
-                                    <td className="py-3 text-card-foreground">
-                                        {account.entityName?.toUpperCase()}
-                                    </td>
-                                    <td className="py-3 text-muted-foreground">
-                                        {new Date(account.dueDate).toLocaleDateString("pt-BR")}
-                                    </td>
-                                    <td className="py-3 text-card-foreground font-medium">
-                                        {formatCurrency(account.value)}
-                                    </td>
-                                    <td className="py-3">
-                                        <Badge
-                                            variant="outline"
-                                            className={
-                                                account.status === "paid"
-                                                    ? "border-success/30 text-success"
-                                                    : account.status === "pending"
-                                                        ? "border-warning/30 text-warning"
-                                                        : "border-destructive/30 text-destructive"
-                                            }
-                                        >
-                                            {account.status === "paid"
-                                                ? account.type === "payable" ? "Pago" : "Recebido"
-                                                : account.status === "pending"
-                                                    ? "Pendente"
-                                                    : "Vencido"
-                                            }
-                                        </Badge>
-                                    </td>
-                                </tr>
-                            ))}
-                            {data.recentAccounts.length === 0 && (
-                                <tr>
-                                    <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                                        Nenhuma conta encontrada
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </motion.div>
         </div>
     )
 }

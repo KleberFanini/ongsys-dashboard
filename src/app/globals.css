@@ -180,3 +180,27 @@
   --sidebar-border: 222 47% 18%;
   --sidebar-muted: 222 47% 14%;
 }
+
+/* Estilização para input type="date" */
+input[type="date"] {
+    color-scheme: light dark; /* Permite que o navegador adapte as cores */
+}
+
+/* Para dark mode específico */
+.dark input[type="date"] {
+    color-scheme: dark; /* Força o esquema de cores dark */
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    border-color: hsl(var(--border));
+}
+
+/* Estilização do calendário dropdown (webkit) */
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1); /* Inverte as cores do ícone (branco vira preto e vice-versa) */
+    cursor: pointer;
+    opacity: 0.8;
+}
+
+.dark input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}

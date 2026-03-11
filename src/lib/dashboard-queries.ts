@@ -1,8 +1,30 @@
 import { query } from './db'
-import { DashboardSummary } from './dashboard-types'
+import { DashboardSummary, DateFilter } from './dashboard-types'
 
-export async function getDashboardSummary(): Promise<DashboardSummary> {
+export async function getDashboardSummary(filters?: DateFilter): Promise<DashboardSummary> {
   try {
+    const { startDate, endDate } = filters || {}
+
+    console.log('📡 Dashboard API - Filtros recebidos:', { startDate, endDate })
+
+    // Construir cláusula WHERE para datas
+    let dateWhereClause = '1=1'
+    const dateValues: any[] = []
+
+    if (startDate) {
+      dateWhereClause += ` AND data_pedido >= $${dateValues.length + 1}`
+      dateValues.push(startDate)
+      console.log('📅 Filtro data inicial:', startDate)
+    }
+    if (endDate) {
+      dateWhereClause += ` AND data_pedido <= $${dateValues.length + 1}`
+      dateValues.push(endDate)
+      console.log('📅 Filtro data final:', endDate)
+    }
+
+    console.log('🔍 Query WHERE:', dateWhereClause)
+    console.log('📦 Valores:', dateValues)
+
     // Buscar totais de pedidos por tipo (Produto vs Serviço)
     const totalsResult = await query(`
       WITH produtos_pedidos AS (
