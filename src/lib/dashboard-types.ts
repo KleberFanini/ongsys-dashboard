@@ -11,9 +11,37 @@ export interface DashboardSummary {
     totalPayable: number
     totalReceivable: number
     lowStockProducts: number
-    monthlyData: MonthlyData[]
+
+    topSuppliers: TopSupplier[]
+
+    topItems: TopItem[]
+
+    availableCostCenters: CostCenter[]
+
     unitMeasureData: UnitMeasureData[]
     recentAccounts: RecentAccount[]
+}
+
+export interface TopSupplier {
+    name: string
+    document: string
+    totalValue: number
+    orderCount: number
+}
+
+export interface TopItem {
+    name: string
+    group: string
+    totalQuantity: number
+    totalValue: number
+    orderCount: number
+}
+
+export interface CostCenter {
+    code: string
+    name: string
+    totalValue: number
+    orderCount: number
 }
 
 export interface MonthlyData {
@@ -41,4 +69,5 @@ export interface RecentAccount {
 export interface DateFilter {
     startDate?: string
     endDate?: string
+    costCenter?: string
 }

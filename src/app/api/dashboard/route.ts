@@ -7,11 +7,18 @@ export async function GET(request: NextRequest) {
         const searchParams = request.nextUrl.searchParams
         const startDate = searchParams.get('startDate')
         const endDate = searchParams.get('endDate')
+        const costCenter = searchParams.get('costCenter')
 
-        // Criar objeto de filtros apenas com valores válidos
-        const filters: { startDate?: string; endDate?: string } = {}
+        console.log('🔍 API recebeu:', { startDate, endDate, costCenter })
 
-        // Só adicionar se existir e não for null
+        // Criar objeto de filtros incluindo TODOS os parâmetros
+        const filters: {
+            startDate?: string;
+            endDate?: string;
+            costCenter?: string;
+        } = {}
+
+        // Adicionar apenas se existir e não for vazio
         if (startDate && startDate.trim() !== '') {
             filters.startDate = startDate
         }
@@ -19,6 +26,12 @@ export async function GET(request: NextRequest) {
         if (endDate && endDate.trim() !== '') {
             filters.endDate = endDate
         }
+
+        if (costCenter && costCenter.trim() !== '' && costCenter !== 'todos') {
+            filters.costCenter = costCenter
+        }
+
+        console.log('📦 Enviando filtros para getDashboardSummary:', filters)
 
         const data = await getDashboardSummary(filters)
         return NextResponse.json(data)
