@@ -51,7 +51,7 @@ export function AppSidebar() {
                             <BarChart3 className="w-5 h-5 text-[hsl(221,83%,53%)]" />
                             {!collapsed && (
                                 <span className="font-bold text-sm text-white">
-                                    ERP Pro
+                                    ERP CDC
                                 </span>
                             )}
                         </div>
@@ -77,16 +77,6 @@ export function AppSidebar() {
                     </SidebarGroupContent>
                 </SidebarGroup>
             </SidebarContent>
-            <SidebarFooter>
-                <Button
-                    variant="ghost"
-                    className="w-full justify-start text-[hsl(210,40%,90%)] hover:bg-[hsl(222,47%,16%)] hover:text-white"
-                    onClick={handleLogout}
-                >
-                    <LogOut className="mr-2 h-4 w-4" />
-                    {!collapsed && "Sair"}
-                </Button>
-            </SidebarFooter>
         </Sidebar>
     )
 }

@@ -76,11 +76,6 @@ export function TopBar({
                     >
                         <Menu className="h-5 w-5" />
                     </Button>
-
-                    {/* Título da página */}
-                    <h1 className="text-xl font-semibold text-foreground">
-                        {title}
-                    </h1>
                 </div>
 
                 {/* Ícones e ações da direita */}
@@ -99,19 +94,6 @@ export function TopBar({
                             <Moon className="h-5 w-5" />
                         )}
                     </Button>
-
-                    {/* Notificações */}
-                    {showNotifications && (
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="relative text-muted-foreground hover:text-foreground"
-                            aria-label="Notificações"
-                        >
-                            <Bell className="h-5 w-5" />
-                            <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full" />
-                        </Button>
-                    )}
 
                     {/* Menu do usuário */}
                     {showUserMenu && (
