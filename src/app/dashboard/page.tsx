@@ -24,6 +24,7 @@ import { Badge } from "@/src/components/ui/badge"
 import { Button } from "@/src/components/ui/button"
 import { Input } from "@/src/components/ui/input"
 import { DashboardSummary, CostCenter } from "@/src/lib/dashboard-types"
+import { costCentersList, getCostCenterName } from '@/src/lib/cost-centers-map'
 
 const formatCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v)
@@ -243,7 +244,7 @@ export default function DashboardPage() {
                                 <option value="todos">Todos os centros</option>
                                 {availableCostCenters.map((cc) => (
                                     <option key={cc.code} value={cc.code}>
-                                        {cc.code}
+                                        {cc.name} {/* Agora mostra o nome em vez do código */}
                                     </option>
                                 ))}
                             </select>

@@ -1,6 +1,7 @@
 // ongsys-dashboard/src/lib/dashboard-queries.ts
 import { query } from './db'
 import { DashboardSummary, DateFilter, TopSupplier, TopItem, CostCenter } from './dashboard-types'
+import { getCostCenterName, costCentersMap } from './cost-centers-map'
 
 export async function getDashboardSummary(filters?: DateFilter): Promise<DashboardSummary> {
   try {
@@ -266,12 +267,18 @@ async function getAvailableCostCenters(startDate?: string, endDate?: string): Pr
 
     const result = await query(queryText, params)
 
-    return result.rows.map((row: any) => ({
-      code: row.code || 'Não informado',
-      name: row.code || 'Não informado',
-      totalValue: 0,
-      orderCount: parseInt(row.total) || 0
-    }))
+    // Usar o mapa para substituir os códigos pelos nomes
+    return result.rows
+      .map((row: any) => {
+        const code = row.code || 'Não informado'
+        return {
+          code: code,
+          name: getCostCenterName(code), // Aqui substituímos pelo nome
+          totalValue: 0,
+          orderCount: parseInt(row.total) || 0
+        }
+      })
+      .sort((a, b) => a.name.localeCompare(b.name)) // Ordenar por nome
   } catch (error) {
     console.error('Erro ao buscar centros de custo:', error)
     return []
