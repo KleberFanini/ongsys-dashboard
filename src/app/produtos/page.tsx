@@ -12,7 +12,6 @@ import {
     Filter,
     CheckCircle,
     XCircle,
-    Clock,
     Ruler,
     Package2,
     Building2,
@@ -33,14 +32,12 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/src/components/ui/dropdown-menu"
+import { clearCache } from '@/src/lib/api/cache';
 
 const PAGE_SIZE = 20
 
-const formatCurrency = (v: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v)
-
 interface Product {
-    id: number
+    id: string
     codigo: string
     nome: string
     categoria: string
@@ -50,72 +47,143 @@ interface Product {
     origem?: string
     contaPadrao?: string
     fabricante?: string
+    valorCustoBase?: number
 }
 
+const STATUS_OPTIONS = [
+    { value: 'Todos', label: 'Todos os status', icon: null, color: '' },
+    { value: 'ativo', label: 'Ativo', icon: CheckCircle, color: 'text-success' },
+    { value: 'inativo', label: 'Inativo', icon: XCircle, color: 'text-destructive' },
+]
+
 export default function ProdutosPage() {
-    const [products, setProducts] = useState<Product[]>([])
-    const [categorias, setCategorias] = useState<string[]>(['Todos'])
-    const [statusList, setStatusList] = useState<string[]>(['Todos'])
+    const [allProducts, setAllProducts] = useState<Product[]>([])
+    const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState("")
     const [categoria, setCategoria] = useState("Todos")
     const [status, setStatus] = useState("Todos")
     const [page, setPage] = useState(1)
-    const [totalPages, setTotalPages] = useState(1)
-    const [totalItems, setTotalItems] = useState(0)
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
     const [exporting, setExporting] = useState(false)
+    const [categorias, setCategorias] = useState<string[]>(['Todos'])
 
-    // Buscar categorias e status
-    useEffect(() => {
-        async function fetchFilters() {
-            try {
-                const response = await fetch('/api/produtos/categorias')
+    const fetchAllProducts = async () => {
+        setLoading(true)
+        try {
+            let allData: Product[] = []
+            let currentPage = 1
+            let hasMore = true
+            let totalRecords = 0
+
+            while (hasMore) {
+                const params = new URLSearchParams()
+                params.append('page', currentPage.toString())
+
+                console.log(`📄 Buscando página ${currentPage}...`)
+                const response = await fetch(`/api/produtos?${params.toString()}`)
+
+                if (!response.ok) {
+                    throw new Error(`Erro ao buscar página ${currentPage}`)
+                }
+
                 const data = await response.json()
-                setCategorias(['Todos', ...data.categorias])
-                setStatusList(['Todos', ...data.statusList])
-            } catch (error) {
-                console.error('Erro ao buscar filtros:', error)
+
+                if (currentPage === 1) {
+                    totalRecords = data.totalItems || data.totalRecords || 0
+                    console.log(`📊 Total de registros na API: ${totalRecords}`)
+                }
+
+                const produtosFormatados: Product[] = (data.data || []).map((item: any) => ({
+                    id: String(item.id),
+                    codigo: String(item.id),
+                    nome: item.nomeProduto || 'Produto sem nome',
+                    categoria: item.grupo || 'Sem categoria',
+                    unidadeMedida: item.unidadeMedida || 'Unidade',
+                    status: item.status === 'inativo' ? 'inativo' : 'ativo',
+                    descricao: item.descricaoProduto || '',
+                    origem: item.origem || 'Não informada',
+                    contaPadrao: item.contaPadraoPlanoFinanceiro || '',
+                    fabricante: item.fabricante || '',
+                    valorCustoBase: parseFloat(item.valorCustoBase) || 0
+                }))
+
+                allData = [...allData, ...produtosFormatados]
+
+                console.log(`📄 Página ${currentPage}: +${produtosFormatados.length} produtos (total: ${allData.length})`)
+
+                const totalPages = Math.ceil(totalRecords / 100)
+                hasMore = currentPage < totalPages
+                currentPage++
+
+                if (hasMore) {
+                    await new Promise(resolve => setTimeout(resolve, 100))
+                }
             }
+
+            console.log(`✅ Total de produtos carregados: ${allData.length}`)
+            setAllProducts(allData)
+
+            const uniqueCategorias = ['Todos', ...new Set(allData.map(p => p.categoria).filter(Boolean))]
+            setCategorias(uniqueCategorias)
+
+            applyFilters(allData, search, categoria, status)
+
+        } catch (error) {
+            console.error('Erro ao buscar produtos:', error)
+        } finally {
+            setLoading(false)
         }
-        fetchFilters()
+    }
+
+    const applyFilters = (products: Product[], searchTerm: string, cat: string, stat: string) => {
+        let filtered = [...products]
+
+        if (searchTerm) {
+            const searchLower = searchTerm.toLowerCase()
+            filtered = filtered.filter(p =>
+                p.nome.toLowerCase().includes(searchLower) ||
+                p.codigo.toLowerCase().includes(searchLower) ||
+                p.categoria.toLowerCase().includes(searchLower)
+            )
+        }
+
+        if (cat !== 'Todos') {
+            filtered = filtered.filter(p => p.categoria === cat)
+        }
+
+        if (stat !== 'Todos') {
+            filtered = filtered.filter(p => p.status === stat)
+        }
+
+        setFilteredProducts(filtered)
+        setPage(1)
+    }
+
+    // Carregar todos os produtos na montagem do componente
+    useEffect(() => {
+        // Limpar cache em desenvolvimento
+        if (process.env.NODE_ENV === 'development') {
+            clearCache()
+        }
+        fetchAllProducts()
     }, [])
 
-    // Buscar produtos
+    // Aplicar filtros quando os critérios mudarem
     useEffect(() => {
-        async function fetchProducts() {
-            setLoading(true)
-            try {
-                const params = new URLSearchParams()
-                if (search) params.append('search', search)
-                if (categoria !== 'Todos') params.append('categoria', categoria)
-                if (status !== 'Todos') params.append('status', status)
-                params.append('page', page.toString())
-
-                const response = await fetch(`/api/produtos?${params.toString()}`)
-                const data = await response.json()
-
-                setProducts(data.data)
-                setTotalPages(data.totalPages)
-                setTotalItems(data.total)
-            } catch (error) {
-                console.error('Erro ao buscar produtos:', error)
-            } finally {
-                setLoading(false)
-            }
+        if (allProducts.length > 0) {
+            applyFilters(allProducts, search, categoria, status)
         }
+    }, [search, categoria, status, allProducts])
 
-        const timer = setTimeout(() => {
-            fetchProducts()
-        }, 500)
+    // Paginação dos dados filtrados
+    const paginatedProducts = filteredProducts.slice(
+        (page - 1) * PAGE_SIZE,
+        page * PAGE_SIZE
+    )
 
-        return () => clearTimeout(timer)
-    }, [search, categoria, status, page])
-
-    // Resetar página quando filtros mudam
-    useEffect(() => {
-        setPage(1)
-    }, [search, categoria, status])
+    const totalItems = filteredProducts.length
+    const totalPages = Math.ceil(totalItems / PAGE_SIZE)
 
     // Função para obter o ícone do status
     const getStatusIcon = (statusValue: string) => {
@@ -127,32 +195,12 @@ export default function ProdutosPage() {
         return null
     }
 
-    // Função para exportar
+    // Função para exportar (simulada por enquanto)
     const handleExport = async (tipo: 'filtro' | 'pagina' | 'tudo') => {
         setExporting(true)
         try {
-            const params = new URLSearchParams()
-            if (tipo !== 'tudo') {
-                if (search) params.append('search', search)
-                if (categoria !== 'Todos') params.append('categoria', categoria)
-                if (status !== 'Todos') params.append('status', status)
-                if (tipo === 'pagina') params.append('page', page.toString())
-            }
-            params.append('tipo', tipo)
-
-            const response = await fetch(`/api/produtos/export?${params.toString()}`)
-
-            if (!response.ok) throw new Error('Erro ao exportar')
-
-            const blob = await response.blob()
-            const url = window.URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = url
-            a.download = `produtos_${new Date().toISOString().split('T')[0]}_${tipo}.csv`
-            document.body.appendChild(a)
-            a.click()
-            document.body.removeChild(a)
-            window.URL.revokeObjectURL(url)
+            await new Promise(resolve => setTimeout(resolve, 1000))
+            alert(`Exportação de ${tipo} simulada! ${tipo === 'pagina' ? paginatedProducts.length : totalItems} itens.`)
         } catch (error) {
             console.error('Erro ao exportar:', error)
             alert('Erro ao exportar produtos. Tente novamente.')
@@ -161,15 +209,7 @@ export default function ProdutosPage() {
         }
     }
 
-    // Opções de status
-    const STATUS_OPTIONS = [
-        { value: 'Todos', label: 'Todos os status', icon: null },
-        { value: 'ativo', label: 'Ativo', icon: CheckCircle, color: 'text-success' },
-        { value: 'inativo', label: 'Inativo', icon: XCircle, color: 'text-destructive' },
-        { value: 'pendente', label: 'Pendente', icon: Clock, color: 'text-warning' },
-    ]
-
-    if (loading && products.length === 0) {
+    if (loading && allProducts.length === 0) {
         return (
             <div className="space-y-4 p-6">
                 <Skeleton className="h-8 w-48" />
@@ -192,7 +232,7 @@ export default function ProdutosPage() {
                         {totalItems.toLocaleString("pt-BR")} produtos encontrados
                         {totalItems > PAGE_SIZE && (
                             <span className="text-xs ml-2">
-                                (mostrando {products.length} na página {page})
+                                (mostrando {paginatedProducts.length} na página {page})
                             </span>
                         )}
                     </p>
@@ -211,7 +251,7 @@ export default function ProdutosPage() {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => handleExport('pagina')}>
                             <Filter className="w-4 h-4 mr-2" />
-                            Página atual ({products.length} itens)
+                            Página atual ({paginatedProducts.length} itens)
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleExport('filtro')}>
                             <Filter className="w-4 h-4 mr-2" />
@@ -286,7 +326,7 @@ export default function ProdutosPage() {
                     )}
                     {status !== 'Todos' && (
                         <Badge variant="secondary" className="gap-1">
-                            Status: {status}
+                            Status: {status === 'ativo' ? 'Ativo' : 'Inativo'}
                             <button onClick={() => setStatus('Todos')} className="ml-1 hover:text-foreground">×</button>
                         </Badge>
                     )}
@@ -308,9 +348,9 @@ export default function ProdutosPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {products.map((product, index) => (
+                            {paginatedProducts.map((product, index) => (
                                 <motion.tr
-                                    key={product.id}
+                                    key={`${product.id}-${product.codigo}-${index}`}
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: index * 0.03 }}
@@ -324,14 +364,14 @@ export default function ProdutosPage() {
                                     </td>
                                     <td className="p-3 hidden md:table-cell">
                                         <Badge variant="outline" className="text-xs">
-                                            {product.categoria || 'Sem categoria'}
+                                            {product.categoria}
                                         </Badge>
                                     </td>
                                     <td className="p-3 hidden sm:table-cell">
                                         <div className="flex items-center gap-1">
                                             <Ruler className="w-3 h-3 text-muted-foreground" />
                                             <span className="text-card-foreground">
-                                                {product.unidadeMedida || 'Não informada'}
+                                                {product.unidadeMedida}
                                             </span>
                                         </div>
                                     </td>
@@ -341,16 +381,12 @@ export default function ProdutosPage() {
                                             <Badge
                                                 variant="outline"
                                                 className={
-                                                    product.status?.toLowerCase() === 'ativo'
+                                                    product.status === 'ativo'
                                                         ? 'border-success/30 text-success'
-                                                        : product.status?.toLowerCase() === 'inativo'
-                                                            ? 'border-destructive/30 text-destructive'
-                                                            : product.status?.toLowerCase() === 'pendente'
-                                                                ? 'border-warning/30 text-warning'
-                                                                : 'border-muted-foreground/30 text-muted-foreground'
+                                                        : 'border-destructive/30 text-destructive'
                                                 }
                                             >
-                                                {product.status || 'Sem status'}
+                                                {product.status === 'ativo' ? 'Ativo' : 'Inativo'}
                                             </Badge>
                                         </div>
                                     </td>
@@ -366,7 +402,7 @@ export default function ProdutosPage() {
                                     </td>
                                 </motion.tr>
                             ))}
-                            {products.length === 0 && (
+                            {paginatedProducts.length === 0 && (
                                 <tr>
                                     <td colSpan={6} className="p-8 text-center text-muted-foreground">
                                         Nenhum produto encontrado com os filtros selecionados
@@ -378,36 +414,38 @@ export default function ProdutosPage() {
                 </div>
 
                 {/* Paginação */}
-                <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30">
-                    <p className="text-sm text-muted-foreground">
-                        {totalItems > 0 ? (
-                            <>Mostrando {((page - 1) * PAGE_SIZE) + 1} - {Math.min(page * PAGE_SIZE, totalItems)} de {totalItems} produtos</>
-                        ) : (
-                            'Nenhum produto encontrado'
-                        )}
-                    </p>
-                    <div className="flex gap-1">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={page <= 1}
-                            onClick={() => setPage(page - 1)}
-                        >
-                            <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={page >= totalPages}
-                            onClick={() => setPage(page + 1)}
-                        >
-                            <ChevronRight className="w-4 h-4" />
-                        </Button>
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30">
+                        <p className="text-sm text-muted-foreground">
+                            {totalItems > 0 ? (
+                                <>Mostrando {((page - 1) * PAGE_SIZE) + 1} - {Math.min(page * PAGE_SIZE, totalItems)} de {totalItems} produtos</>
+                            ) : (
+                                'Nenhum produto encontrado'
+                            )}
+                        </p>
+                        <div className="flex gap-1">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={page <= 1}
+                                onClick={() => setPage(page - 1)}
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={page >= totalPages}
+                                onClick={() => setPage(page + 1)}
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </Button>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
 
-            {/* Modal de detalhes - AGORA COM TODOS OS CAMPOS */}
+            {/* Modal de detalhes */}
             <Dialog open={!!selectedProduct} onOpenChange={() => setSelectedProduct(null)}>
                 <DialogContent className="max-w-2xl">
                     <DialogHeader>
@@ -415,7 +453,6 @@ export default function ProdutosPage() {
                     </DialogHeader>
                     {selectedProduct && (
                         <div className="space-y-4">
-                            {/* Linha 1: Código e Nome */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -437,7 +474,6 @@ export default function ProdutosPage() {
                                 </div>
                             </div>
 
-                            {/* Linha 2: Categoria e Status */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -445,7 +481,7 @@ export default function ProdutosPage() {
                                         <span>Grupo</span>
                                     </div>
                                     <p className="text-card-foreground text-sm font-medium pl-6">
-                                        {selectedProduct.categoria || 'Não informada'}
+                                        {selectedProduct.categoria}
                                     </p>
                                 </div>
                                 <div className="space-y-1">
@@ -457,22 +493,17 @@ export default function ProdutosPage() {
                                         <Badge
                                             variant="outline"
                                             className={
-                                                selectedProduct.status?.toLowerCase() === 'ativo'
+                                                selectedProduct.status === 'ativo'
                                                     ? 'border-success/30 text-success'
-                                                    : selectedProduct.status?.toLowerCase() === 'inativo'
-                                                        ? 'border-destructive/30 text-destructive'
-                                                        : selectedProduct.status?.toLowerCase() === 'pendente'
-                                                            ? 'border-warning/30 text-warning'
-                                                            : 'border-muted-foreground/30 text-muted-foreground'
+                                                    : 'border-destructive/30 text-destructive'
                                             }
                                         >
-                                            {selectedProduct.status || 'Não informado'}
+                                            {selectedProduct.status === 'ativo' ? 'Ativo' : 'Inativo'}
                                         </Badge>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Linha 3: Unidade de Medida e Fabricante */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -480,7 +511,7 @@ export default function ProdutosPage() {
                                         <span>Unidade de Medida</span>
                                     </div>
                                     <p className="text-card-foreground text-sm font-medium pl-6">
-                                        {selectedProduct.unidadeMedida || 'Não informada'}
+                                        {selectedProduct.unidadeMedida}
                                     </p>
                                 </div>
                                 <div className="space-y-1">
@@ -494,7 +525,6 @@ export default function ProdutosPage() {
                                 </div>
                             </div>
 
-                            {/* Linha 4: Origem e Conta Padrão */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -502,7 +532,7 @@ export default function ProdutosPage() {
                                         <span>Origem</span>
                                     </div>
                                     <p className="text-card-foreground text-sm font-medium pl-6">
-                                        {selectedProduct.origem || 'Não informada'}
+                                        {selectedProduct.origem}
                                     </p>
                                 </div>
                                 <div className="space-y-1">
@@ -516,7 +546,6 @@ export default function ProdutosPage() {
                                 </div>
                             </div>
 
-                            {/* Linha 5: Descrição (ocupa linha inteira) */}
                             <div className="space-y-1">
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                     <FileText className="w-4 h-4" />

@@ -136,19 +136,10 @@ export default function PedidosPage() {
     const [allOrders, setAllOrders] = useState<Order[]>([])
     const [updateTrigger, setUpdateTrigger] = useState(0)
 
-    // Buscar TODOS os pedidos uma única vez
     useEffect(() => {
-        async function fetchAllOrders() {
-            try {
-                const response = await fetch('/api/pedidos?page=1&limit=10000')
-                const data = await response.json()
-                setAllOrders(data.data || [])
-            } catch (error) {
-                console.error('Erro ao buscar todos os pedidos:', error)
-            }
-        }
-        fetchAllOrders()
-    }, [])
+        // Usar os pedidos já carregados na página atual
+        setAllOrders(orders)
+    }, [orders])
 
     // Efeito para atualizar as médias a cada minuto
     useEffect(() => {

@@ -1,3 +1,4 @@
+// src/app/dashboard/page.tsx
 'use client'
 
 import { useState, useEffect } from "react"
@@ -45,6 +46,12 @@ export default function DashboardPage() {
     const [availableCostCenters, setAvailableCostCenters] = useState<CostCenter[]>([])
     const [showDateFilter, setShowDateFilter] = useState(false)
 
+    // 🔥 NOVOS ESTADOS PARA FILTRO APLICADO
+    const [appliedStartDate, setAppliedStartDate] = useState('')
+    const [appliedEndDate, setAppliedEndDate] = useState('')
+    const [appliedCostCenter, setAppliedCostCenter] = useState('todos')
+    const [hasActiveFilters, setHasActiveFilters] = useState(false)
+
     const getUnitColor = (unit: string): string => {
         const colors: Record<string, string> = {
             'Unidade': '#3b82f6',
@@ -72,21 +79,21 @@ export default function DashboardPage() {
         return () => observer.disconnect()
     }, [])
 
-    // Função para buscar dados com filtros
+    // Função para buscar dados com os filtros APLICADOS
     const fetchData = async () => {
         setLoading(true)
         try {
             const params = new URLSearchParams()
-            if (startDate) params.append('startDate', startDate)
-            if (endDate) params.append('endDate', endDate)
-            if (selectedCostCenter && selectedCostCenter !== 'todos') {
-                params.append('costCenter', selectedCostCenter)
+            if (appliedStartDate) params.append('startDate', appliedStartDate)
+            if (appliedEndDate) params.append('endDate', appliedEndDate)
+            if (appliedCostCenter && appliedCostCenter !== 'todos') {
+                params.append('costCenter', appliedCostCenter)
             }
 
-            console.log('🔍 Buscando dados com filtros:', {
-                startDate,
-                endDate,
-                costCenter: selectedCostCenter,
+            console.log('🔍 Buscando dados com filtros aplicados:', {
+                startDate: appliedStartDate,
+                endDate: appliedEndDate,
+                costCenter: appliedCostCenter,
                 url: `/api/dashboard?${params.toString()}`
             })
 
@@ -94,18 +101,22 @@ export default function DashboardPage() {
             if (!response.ok) throw new Error('Erro ao carregar dados')
             const json = await response.json()
 
-            // Log detalhado dos dados retornados
             console.log('✅ Dados recebidos:', {
                 totalProductOrders: json.totalProductOrders,
                 totalServiceOrders: json.totalServiceOrders,
+                totalPayable: json.totalPayable,
+                totalReceivable: json.totalReceivable,
                 topSuppliersCount: json.topSuppliers?.length,
-                topItemsCount: json.topItems?.length,
-                firstItem: json.topItems?.[0],
-                firstSupplier: json.topSuppliers?.[0]
+                topItemsCount: json.topItems?.length
             })
 
             setData(json)
             setAvailableCostCenters(json.availableCostCenters || [])
+
+            // Verificar se há filtros ativos
+            const hasFilters = !!(appliedStartDate || appliedEndDate || appliedCostCenter !== 'todos')
+            setHasActiveFilters(hasFilters)
+
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Erro desconhecido')
         } finally {
@@ -113,26 +124,52 @@ export default function DashboardPage() {
         }
     }
 
-    // Buscar dados quando os filtros mudarem
-    useEffect(() => {
-        fetchData()
-    }, [startDate, endDate, selectedCostCenter])
-
-    // Aplicar filtro de data
+    // 🔥 APLICAR FILTRO - só chama quando clica no botão
     const handleApplyFilter = () => {
         if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
             alert('Data inicial não pode ser maior que data final')
             return
         }
+
+        // Aplicar os filtros
+        setAppliedStartDate(startDate)
+        setAppliedEndDate(endDate)
+        setAppliedCostCenter(selectedCostCenter)
         setShowDateFilter(false)
     }
 
-    // Limpar filtro de data
+    // 🔥 LIMPAR FILTRO
     const handleClearFilter = () => {
         setStartDate('')
         setEndDate('')
         setSelectedCostCenter('todos')
+        setAppliedStartDate('')
+        setAppliedEndDate('')
+        setAppliedCostCenter('todos')
         setShowDateFilter(false)
+    }
+
+    // Buscar dados quando os filtros APLICADOS mudarem
+    useEffect(() => {
+        fetchData()
+    }, [appliedStartDate, appliedEndDate, appliedCostCenter])
+
+    if (error) {
+        return (
+            <div className="p-6">
+                <div className="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-lg">
+                    <h2 className="font-semibold">Erro ao carregar dashboard</h2>
+                    <p className="text-sm mt-1">{error}</p>
+                    <Button
+                        variant="outline"
+                        className="mt-3"
+                        onClick={() => fetchData()}
+                    >
+                        Tentar novamente
+                    </Button>
+                </div>
+            </div>
+        )
     }
 
     if (loading && !data) {
@@ -143,7 +180,7 @@ export default function DashboardPage() {
                     <Skeleton className="h-4 w-72" />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {[...Array(4)].map((_, i) => (
+                    {[...Array(6)].map((_, i) => (
                         <Skeleton key={i} className="h-28 rounded-xl" />
                     ))}
                 </div>
@@ -152,17 +189,6 @@ export default function DashboardPage() {
                     <Skeleton className="h-96 rounded-xl" />
                 </div>
                 <Skeleton className="h-64 rounded-xl" />
-            </div>
-        )
-    }
-
-    if (error) {
-        return (
-            <div className="p-6">
-                <div className="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-lg">
-                    <h2 className="font-semibold">Erro ao carregar dashboard</h2>
-                    <p className="text-sm mt-1">{error}</p>
-                </div>
             </div>
         )
     }
@@ -187,14 +213,14 @@ export default function DashboardPage() {
                         className="flex items-center gap-2"
                     >
                         <Calendar className="w-4 h-4 text-foreground" />
-                        {startDate && endDate ? (
+                        {hasActiveFilters ? (
                             <span>Filtro ativo</span>
                         ) : (
                             <span>Filtrar</span>
                         )}
                     </Button>
 
-                    {(startDate || endDate || selectedCostCenter !== 'todos') && (
+                    {hasActiveFilters && (
                         <Button
                             variant="ghost"
                             size="sm"
@@ -244,7 +270,7 @@ export default function DashboardPage() {
                                 <option value="todos">Todos os centros</option>
                                 {availableCostCenters.map((cc) => (
                                     <option key={cc.code} value={cc.code}>
-                                        {cc.name} {/* Agora mostra o nome em vez do código */}
+                                        {cc.name}
                                     </option>
                                 ))}
                             </select>
@@ -263,53 +289,50 @@ export default function DashboardPage() {
             )}
 
             {/* Indicador de filtros ativos */}
-            {(startDate || endDate || selectedCostCenter !== 'todos') && (
+            {hasActiveFilters && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground bg-primary/5 p-2 rounded-lg flex-wrap">
                     <Filter className="w-4 h-4" />
                     <span>Filtros ativos:</span>
-                    {startDate && endDate && (
+                    {appliedStartDate && appliedEndDate && (
                         <span className="bg-primary/10 px-2 py-1 rounded">
-                            {new Date(startDate).toLocaleDateString('pt-BR')} até {new Date(endDate).toLocaleDateString('pt-BR')}
+                            {new Date(appliedStartDate).toLocaleDateString('pt-BR')} até {new Date(appliedEndDate).toLocaleDateString('pt-BR')}
                         </span>
                     )}
-                    {selectedCostCenter !== 'todos' && (
+                    {appliedCostCenter !== 'todos' && (
                         <span className="bg-primary/10 px-2 py-1 rounded">
-                            Centro: {selectedCostCenter}
+                            Centro: {getCostCenterName(appliedCostCenter)}
                         </span>
                     )}
                 </div>
             )}
 
             {/* Cards de estatísticas */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 <StatCard
-                    title="Total de Produtos por Pedido"
+                    title="Total de Produtos"
                     value={formatNumber(data.totalProductOrders)}
-                    subtitle="Quantidade de pedidos de produto"
+                    subtitle="Pedidos de produto"
                     icon={Package}
                     variant="info"
                 />
-
                 <StatCard
-                    title="Valor Total dos Produtos por Pedido"
+                    title="Valor dos Produtos"
                     value={formatCurrency(data.totalProductOrdersValue)}
-                    subtitle="Soma dos valores de pedidos de produto"
+                    subtitle="Soma dos pedidos de produto"
                     icon={DollarSign}
                     variant="success"
                 />
-
                 <StatCard
-                    title="Total de Serviços por Pedido"
+                    title="Total de Serviços"
                     value={formatNumber(data.totalServiceOrders)}
-                    subtitle="Quantidade de pedidos de serviço"
+                    subtitle="Pedidos de serviço"
                     icon={Briefcase}
                     variant="info"
                 />
-
                 <StatCard
-                    title="Valor Total de Serviços por Pedido"
+                    title="Valor dos Serviços"
                     value={formatCurrency(data.totalServiceOrdersValue)}
-                    subtitle="Soma dos valores de pedidos de serviço"
+                    subtitle="Soma dos pedidos de serviço"
                     icon={DollarSign}
                     variant="success"
                 />
@@ -364,11 +387,6 @@ export default function DashboardPage() {
                                     <p className="text-sm font-bold text-primary">
                                         {formatCurrency(supplier.totalValue)}
                                     </p>
-                                    {data.topSuppliers[0]?.totalValue > 0 && (
-                                        <p className="text-xs text-muted-foreground">
-                                            {((supplier.totalValue / data.topSuppliers[0].totalValue) * 100).toFixed(1)}%
-                                        </p>
-                                    )}
                                 </div>
                             </motion.div>
                         ))}

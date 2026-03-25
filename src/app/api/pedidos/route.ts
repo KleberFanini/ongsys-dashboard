@@ -1,129 +1,119 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { query } from '@/src/lib/db'
+// src/app/api/pedidos/route.ts - Versão otimizada
+import { NextRequest, NextResponse } from 'next/server';
+import { pedidosService } from '@/src/lib/api/services';
 
 export async function GET(request: NextRequest) {
     try {
-        const searchParams = request.nextUrl.searchParams
-        const search = searchParams.get('search') || ''
-        const status = searchParams.get('status') || 'todos'
-        const tipo = searchParams.get('tipo') || 'todos'
-        const page = parseInt(searchParams.get('page') || '1')
-        const limit = 20
-        const offset = (page - 1) * limit
+        const searchParams = request.nextUrl.searchParams;
+        const page = parseInt(searchParams.get('page') || '1');
+        const search = searchParams.get('search') || '';
+        const status = searchParams.get('status') || '';
+        const tipo = searchParams.get('tipo') || '';
+        const limit = searchParams.get('limit');
 
-        let whereClause = '1=1'
-        const values: any[] = []
+        // 🔥 Se for uma requisição com limit (como a do frontend), buscar apenas primeira página
+        if (limit === '10000') {
+            const result = await pedidosService.listar({}, 1);
+            const pedidos = result.data || [];
 
-        // Filtro de busca
-        if (search) {
-            whereClause += ` AND (
-                LOWER(titulo) LIKE LOWER($${values.length + 1})
-                OR LOWER(fornecedor_nome) LIKE LOWER($${values.length + 1})
-                OR id_pedido LIKE $${values.length + 1}
-            )`
-            values.push(`%${search}%`)
-        }
+            const pedidosAdaptados = pedidos.map((p: any) => ({
+                id: p.idPedido,
+                id_pedido: p.idPedido,
+                titulo: p.titulo,
+                status_pedido: p.statusPedido,
+                fornecedor_nome: p.fornecedor?.nome,
+                fornecedor_documento: p.fornecedor?.documento,
+                requisitante: p.requisitante,
+                data_pedido: p.dataPedido,
+                tipo_pedido: p.tipoPedido,
+                local_entrega: p.localEntrega,
+                itens_pedido: p.itensPedido,
+                logs: p.logs,
+                descricao_pedido: p.descricaoPedido,
+                justificativa_compra: p.justificativaCompra
+            }));
 
-        // Filtro por status
-        if (status !== 'todos') {
-            whereClause += ` AND LOWER(status_pedido) = LOWER($${values.length + 1})`
-            values.push(status)
-        }
-
-        // Filtro por tipo
-        if (tipo !== 'todos') {
-            whereClause += ` AND LOWER(tipo_pedido) = LOWER($${values.length + 1})`
-            values.push(tipo)
-        }
-
-        // Query principal com logs
-        const dataQuery = `
-            SELECT 
-                id,
-                id_pedido,
-                titulo,
-                status_pedido,
-                fornecedor_nome,
-                fornecedor_documento,
-                requisitante,
-                data_pedido,
-                tipo_pedido,
-                valor_total,
-                local_entrega,
-                itens_pedido,
-                logs
-            FROM pedidos
-            WHERE ${whereClause}
-            ORDER BY data_pedido DESC
-            LIMIT $${values.length + 1} OFFSET $${values.length + 2}
-        `
-
-        const dataValues = [...values, limit, offset]
-        const countQuery = `
-            SELECT COUNT(*) as total
-            FROM pedidos
-            WHERE ${whereClause}
-        `
-
-        const [dataResult, countResult] = await Promise.all([
-            query(dataQuery, dataValues),
-            query(countQuery, values)
-        ]);
-
-        // DEBUG DETALHADO
-        console.log('='.repeat(50));
-        console.log('🔍 DEBUG PEDIDOS API');
-        console.log('='.repeat(50));
-        console.log(`📊 Total de pedidos encontrados: ${dataResult.rows.length}`);
-
-        if (dataResult.rows.length > 0) {
-            const primeiro = dataResult.rows[0];
-            console.log('\n📦 Primeiro pedido:');
-            console.log('   ID:', primeiro.id_pedido);
-            console.log('   Título:', primeiro.titulo);
-            console.log('   Status:', primeiro.status_pedido);
-            console.log('\n📋 Campo logs:');
-            console.log('   Existe?', primeiro.logs ? 'SIM' : 'NÃO');
-            console.log('   Tipo:', typeof primeiro.logs);
-            console.log('   É array?', Array.isArray(primeiro.logs));
-            console.log('   Conteúdo:', JSON.stringify(primeiro.logs, null, 2));
-
-            // Se for string, tenta parsear
-            if (typeof primeiro.logs === 'string') {
-                try {
-                    const parsed = JSON.parse(primeiro.logs);
-                    console.log('\n📋 Logs parseados:');
-                    console.log('   Tipo após parse:', typeof parsed);
-                    console.log('   É array?', Array.isArray(parsed));
-                    console.log('   Tamanho:', Array.isArray(parsed) ? parsed.length : 'n/a');
-                    console.log('   Conteúdo:', JSON.stringify(parsed, null, 2));
-                } catch (e) {
-                    // CORREÇÃO: Verifica o tipo do erro
-                    if (e instanceof Error) {
-                        console.log('❌ Erro ao parsear logs:', e.message);
-                    } else {
-                        console.log('❌ Erro desconhecido ao parsear logs');
-                    }
+            // Calcular valor total
+            pedidosAdaptados.forEach((pedido: any) => {
+                if (pedido.itens_pedido && Array.isArray(pedido.itens_pedido)) {
+                    pedido.valor_total = pedido.itens_pedido.reduce((acc: number, item: any) => {
+                        const quantidade = parseFloat(item.quantidade) || 0;
+                        const valorUnitario = parseFloat(item.valorUnitario) || 0;
+                        return acc + (quantidade * valorUnitario);
+                    }, 0);
                 }
-            }
-        }
-        console.log('='.repeat(50));
+            });
 
-        const total = parseInt(countResult.rows[0].total)
+            return NextResponse.json({
+                data: pedidosAdaptados,
+                total: result.totalItems,
+                totalPages: result.totalPages,
+                currentPage: 1
+            });
+        }
+
+        // Buscar a página específica
+        const result = await pedidosService.listar({}, page);
+
+        let pedidos = result.data || [];
+
+        // Aplicar filtros localmente
+        if (search) {
+            const searchLower = search.toLowerCase();
+            pedidos = pedidos.filter((p: any) =>
+                p.titulo?.toLowerCase().includes(searchLower) ||
+                p.idPedido?.toLowerCase().includes(searchLower) ||
+                p.fornecedor?.nome?.toLowerCase().includes(searchLower)
+            );
+        }
+
+        if (status && status !== 'todos') {
+            pedidos = pedidos.filter((p: any) => p.statusPedido === status);
+        }
+
+        if (tipo && tipo !== 'todos') {
+            pedidos = pedidos.filter((p: any) => p.tipoPedido === tipo);
+        }
+
+        const pedidosAdaptados = pedidos.map((p: any) => ({
+            id: p.idPedido,
+            id_pedido: p.idPedido,
+            titulo: p.titulo,
+            status_pedido: p.statusPedido,
+            fornecedor_nome: p.fornecedor?.nome,
+            fornecedor_documento: p.fornecedor?.documento,
+            requisitante: p.requisitante,
+            data_pedido: p.dataPedido,
+            tipo_pedido: p.tipoPedido,
+            local_entrega: p.localEntrega,
+            itens_pedido: p.itensPedido,
+            logs: p.logs,
+            descricao_pedido: p.descricaoPedido,
+            justificativa_compra: p.justificativaCompra
+        }));
+
+        // Calcular valor total
+        pedidosAdaptados.forEach((pedido: any) => {
+            if (pedido.itens_pedido && Array.isArray(pedido.itens_pedido)) {
+                pedido.valor_total = pedido.itens_pedido.reduce((acc: number, item: any) => {
+                    const quantidade = parseFloat(item.quantidade) || 0;
+                    const valorUnitario = parseFloat(item.valorUnitario) || 0;
+                    return acc + (quantidade * valorUnitario);
+                }, 0);
+            }
+        });
 
         return NextResponse.json({
-            data: dataResult.rows,
-            total,
-            page,
-            totalPages: Math.ceil(total / limit)
-        })
-
+            data: pedidosAdaptados,
+            total: result.totalItems,
+            totalPages: result.totalPages,
+            currentPage: page
+        });
     } catch (error) {
-        // CORREÇÃO: Verifica o tipo do erro aqui também
-        console.error('❌ Erro ao buscar pedidos:', error instanceof Error ? error.message : String(error));
+        console.error('Erro ao buscar pedidos:', error);
         return NextResponse.json(
-            { error: 'Erro interno do servidor' },
-            { status: 500 }
-        )
+            { data: [], total: 0, totalPages: 0, currentPage: 1 },
+            { status: 200 }
+        );
     }
 }

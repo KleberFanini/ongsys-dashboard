@@ -1,4 +1,3 @@
-// ongsys-dashboard/src/components/NavLink.tsx
 'use client'
 
 import Link from 'next/link'
@@ -12,7 +11,7 @@ interface NavLinkProps {
     className?: string
     activeClassName?: string
     exact?: boolean
-    includes?: string | string[] // Para rotas que devem ser ativas se incluírem certos padrões
+    includes?: string | string[]
     target?: string
     rel?: string
 }
@@ -31,7 +30,6 @@ export const NavLink = forwardRef<HTMLAnchorElement, NavLinkProps>(
     }, ref) => {
         const pathname = usePathname()
 
-        // Função para verificar se o link está ativo
         const checkIsActive = () => {
             if (exact) {
                 return pathname === href

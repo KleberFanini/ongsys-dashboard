@@ -1,6 +1,6 @@
-// src/app/api/fornecedores/route.ts
+// src/app/api/contas-receber/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { fornecedoresService } from '@/src/lib/api/services';
+import { contasReceberService } from '@/src/lib/api/services';
 
 export async function GET(request: NextRequest) {
     try {
@@ -9,13 +9,13 @@ export async function GET(request: NextRequest) {
         const startDate = searchParams.get('data_inicio') || undefined;
         const endDate = searchParams.get('data_fim') || undefined;
 
-        const result = await fornecedoresService.listar({ startDate, endDate }, page);
+        const result = await contasReceberService.listar({ startDate, endDate }, page);
 
         return NextResponse.json(result);
     } catch (error) {
-        console.error('Erro ao buscar fornecedores:', error);
+        console.error('Erro ao buscar contas a receber:', error);
         return NextResponse.json(
-            { error: 'Erro ao buscar fornecedores' },
+            { error: 'Erro ao buscar contas a receber' },
             { status: 500 }
         );
     }

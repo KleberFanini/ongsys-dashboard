@@ -1,6 +1,5 @@
-// ongsys-dashboard/src/app/api/dashboard/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { getDashboardSummary } from '@/src/lib/dashboard-queries'
+import { getDashboardSummaryFromAPI } from '@/src/lib/dashboard-queries'
 
 export async function GET(request: NextRequest) {
     try {
@@ -9,34 +8,22 @@ export async function GET(request: NextRequest) {
         const endDate = searchParams.get('endDate')
         const costCenter = searchParams.get('costCenter')
 
-        console.log('🔍 API recebeu:', { startDate, endDate, costCenter })
+        console.log('🔍 Dashboard API recebeu:', { startDate, endDate, costCenter })
 
-        // Criar objeto de filtros incluindo TODOS os parâmetros
         const filters: {
             startDate?: string;
             endDate?: string;
             costCenter?: string;
         } = {}
 
-        // Adicionar apenas se existir e não for vazio
-        if (startDate && startDate.trim() !== '') {
-            filters.startDate = startDate
-        }
+        if (startDate && startDate.trim() !== '') filters.startDate = startDate
+        if (endDate && endDate.trim() !== '') filters.endDate = endDate
+        if (costCenter && costCenter.trim() !== '' && costCenter !== 'todos') filters.costCenter = costCenter
 
-        if (endDate && endDate.trim() !== '') {
-            filters.endDate = endDate
-        }
-
-        if (costCenter && costCenter.trim() !== '' && costCenter !== 'todos') {
-            filters.costCenter = costCenter
-        }
-
-        console.log('📦 Enviando filtros para getDashboardSummary:', filters)
-
-        const data = await getDashboardSummary(filters)
+        const data = await getDashboardSummaryFromAPI(filters)
         return NextResponse.json(data)
     } catch (error) {
-        console.error('Erro na API de dashboard:', error)
+        console.error('❌ Erro no dashboard:', error)
         return NextResponse.json(
             { error: 'Erro interno do servidor' },
             { status: 500 }

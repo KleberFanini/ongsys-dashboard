@@ -1,9 +1,9 @@
-// ongsys-dashboard/src/app/fornecedores/page.tsx
+// src/app/fornecedores/page.tsx
 'use client'
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { Search, Eye, ChevronLeft, ChevronRight } from "lucide-react"
+import { Search, Eye, ChevronLeft, ChevronRight, Building2 } from "lucide-react"
 import { Input } from "@/src/components/ui/input"
 import { Button } from "@/src/components/ui/button"
 import { Badge } from "@/src/components/ui/badge"
@@ -15,7 +15,7 @@ import { formatDocument, getDocumentType } from "@/src/lib/utils"
 const PAGE_SIZE = 20
 
 interface Supplier {
-    id: number
+    id: string
     code: string
     name: string
     document: string
@@ -24,6 +24,30 @@ interface Supplier {
     phone: string
     city: string
     state: string
+    ativo: boolean
+}
+
+// Função auxiliar para determinar tipo de pessoa
+function getPersonType(item: any): 'PJ' | 'PF' {
+    // Verificar campo 'pessoa'
+    if (item.pessoa === 'Jurídica') return 'PJ'
+    if (item.pessoa === 'Física') return 'PF'
+
+    // Verificar campo 'tipo'
+    if (item.tipo === 'J') return 'PJ'
+    if (item.tipo === 'F') return 'PF'
+
+    // Verificar campo 'tipoFornecedor'
+    if (item.tipoFornecedor === 'Jurídica') return 'PJ'
+    if (item.tipoFornecedor === 'Física') return 'PF'
+
+    // Verificar pelo documento (se for CNPJ 14 dígitos, é PJ)
+    const doc = item.documento || ''
+    const digits = doc.replace(/\D/g, '')
+    if (digits.length === 14) return 'PJ'
+    if (digits.length === 11) return 'PF'
+
+    return 'PJ' // default
 }
 
 export default function FornecedoresPage() {
@@ -36,40 +60,99 @@ export default function FornecedoresPage() {
     const [totalPages, setTotalPages] = useState(1)
     const [totalItems, setTotalItems] = useState(0)
 
-    // Buscar dados da API
-    useEffect(() => {
-        async function fetchSuppliers() {
-            setLoading(true)
-            try {
-                const params = new URLSearchParams()
-                if (search) params.append('search', search)
-                if (typeFilter !== 'all') params.append('type', typeFilter)
-                params.append('page', page.toString())
+    // Função para buscar fornecedores da API externa
+    const fetchSuppliers = async () => {
+        setLoading(true)
+        try {
+            const params = new URLSearchParams()
+            params.append('page', page.toString())
 
-                const response = await fetch(`/api/fornecedores?${params.toString()}`)
-                const data = await response.json()
+            if (search) params.append('search', search)
 
-                setSuppliers(data.data)
-                setTotalPages(data.totalPages)
-                setTotalItems(data.total)
-            } catch (error) {
-                console.error('Erro ao buscar fornecedores:', error)
-            } finally {
-                setLoading(false)
+            // A API externa precisa de datas
+            const hoje = new Date()
+            const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+            const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)
+
+            params.append('data_inicio', primeiroDia.toISOString().split('T')[0])
+            params.append('data_fim', ultimoDia.toISOString().split('T')[0])
+
+            const response = await fetch(`/api/fornecedores?${params.toString()}`)
+
+            if (!response.ok) {
+                throw new Error('Erro ao buscar fornecedores')
             }
+
+            const data = await response.json()
+
+            // Adaptar dados da API Ongsys para o formato esperado
+            const fornecedoresFormatados: Supplier[] = (data.data || []).map((item: any) => {
+                // Extrair endereço
+                const endereco = item.endereco || {}
+
+                return {
+                    id: String(item.id || item.codigo || ''),
+                    code: String(item.id || item.codigo || ''),
+                    name: item.nomeEmpresa || item.nome || 'Nome não informado',
+                    document: item.documento || '',
+                    personType: getPersonType(item),
+                    email: item.email || '',
+                    phone: item.telefonePrincipal || item.telefone || '',
+                    city: endereco.cidade || '',
+                    state: endereco.estado || '',
+                    ativo: item.ativoInativo === 'A'
+                }
+            })
+
+            // Filtrar por tipo (se necessário)
+            let filtrados: Supplier[] = fornecedoresFormatados
+            if (typeFilter !== 'all') {
+                filtrados = filtrados.filter((supplier: Supplier) => supplier.personType === typeFilter)
+            }
+
+            // Filtrar por busca (se necessário)
+            if (search) {
+                const searchLower = search.toLowerCase()
+                filtrados = filtrados.filter((supplier: Supplier) =>
+                    supplier.name.toLowerCase().includes(searchLower) ||
+                    supplier.document.includes(search) ||
+                    supplier.code.toLowerCase().includes(searchLower)
+                )
+            }
+
+            setSuppliers(filtrados)
+            setTotalItems(filtrados.length)
+            setTotalPages(Math.ceil(filtrados.length / PAGE_SIZE))
+
+        } catch (error) {
+            console.error('Erro ao buscar fornecedores:', error)
+        } finally {
+            setLoading(false)
         }
+    }
 
-        const timer = setTimeout(() => {
-            fetchSuppliers()
-        }, 500)
-
-        return () => clearTimeout(timer)
-    }, [search, typeFilter, page])
+    // Buscar dados quando página ou busca mudar
+    useEffect(() => {
+        fetchSuppliers()
+    }, [page])
 
     // Resetar página quando filtros mudam
     useEffect(() => {
         setPage(1)
     }, [search, typeFilter])
+
+    // Re-buscar quando search ou typeFilter mudar
+    useEffect(() => {
+        if (page === 1) {
+            fetchSuppliers()
+        }
+    }, [search, typeFilter])
+
+    // Paginação dos dados exibidos
+    const paginatedSuppliers = suppliers.slice(
+        (page - 1) * PAGE_SIZE,
+        page * PAGE_SIZE
+    )
 
     if (loading && suppliers.length === 0) {
         return (
@@ -94,7 +177,7 @@ export default function FornecedoresPage() {
                     {totalItems.toLocaleString("pt-BR")} fornecedores encontrados
                     {totalItems > PAGE_SIZE && (
                         <span className="text-xs ml-2">
-                            (mostrando {suppliers.length} na página {page})
+                            (mostrando {paginatedSuppliers.length} na página {page})
                         </span>
                     )}
                 </p>
@@ -156,19 +239,28 @@ export default function FornecedoresPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {suppliers.map((sup) => {
-                                const docType = getDocumentType(sup.document)
+                            {paginatedSuppliers.map((supplier: Supplier) => {
+                                const docType = getDocumentType(supplier.document)
                                 return (
                                     <tr
-                                        key={sup.id}
+                                        key={supplier.id}
                                         className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                                     >
-                                        <td className="p-3 font-mono text-xs text-card-foreground">{sup.code}</td>
-                                        <td className="p-3 text-card-foreground font-medium">{sup.name}</td>
-                                        <td className="p-3 text-muted-foreground hidden md:table-cell font-mono text-xs">
-                                            {/* Documento com máscara */}
+                                        <td className="p-3 font-mono text-xs text-card-foreground">{supplier.code}</td>
+                                        <td className="p-3 text-card-foreground font-medium">
                                             <div className="flex items-center gap-2">
-                                                <span>{formatDocument(sup.document)}</span>
+                                                <Building2 className="w-4 h-4 text-muted-foreground" />
+                                                <span>{supplier.name}</span>
+                                                {!supplier.ativo && (
+                                                    <Badge variant="destructive" className="text-[10px] px-1 py-0">
+                                                        Inativo
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="p-3 text-muted-foreground hidden md:table-cell font-mono text-xs">
+                                            <div className="flex items-center gap-2">
+                                                <span>{formatDocument(supplier.document)}</span>
                                                 <Badge variant="outline" className="text-[10px] px-1 py-0">
                                                     {docType}
                                                 </Badge>
@@ -178,21 +270,21 @@ export default function FornecedoresPage() {
                                             <Badge
                                                 variant="outline"
                                                 className={
-                                                    sup.personType === "PJ"
+                                                    supplier.personType === "PJ"
                                                         ? "border-primary/30 text-primary"
                                                         : "border-chart-5/30 text-chart-5"
                                                 }
                                             >
-                                                {sup.personType === "PJ" ? "Pessoa Jurídica" : "Pessoa Física"}
+                                                {supplier.personType === "PJ" ? "Pessoa Jurídica" : "Pessoa Física"}
                                             </Badge>
                                         </td>
-                                        <td className="p-3 text-muted-foreground hidden lg:table-cell">{sup.email}</td>
-                                        <td className="p-3 text-muted-foreground hidden lg:table-cell">{sup.phone}</td>
+                                        <td className="p-3 text-muted-foreground hidden lg:table-cell">{supplier.email || '—'}</td>
+                                        <td className="p-3 text-muted-foreground hidden lg:table-cell">{supplier.phone || '—'}</td>
                                         <td className="p-3 text-center">
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                onClick={() => setSelected(sup)}
+                                                onClick={() => setSelected(supplier)}
                                             >
                                                 <Eye className="w-4 h-4" />
                                             </Button>
@@ -200,7 +292,7 @@ export default function FornecedoresPage() {
                                     </tr>
                                 )
                             })}
-                            {suppliers.length === 0 && (
+                            {paginatedSuppliers.length === 0 && (
                                 <tr>
                                     <td colSpan={7} className="p-8 text-center text-muted-foreground">
                                         Nenhum fornecedor encontrado
@@ -212,33 +304,35 @@ export default function FornecedoresPage() {
                 </div>
 
                 {/* Paginação */}
-                <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30">
-                    <p className="text-sm text-muted-foreground">
-                        {totalItems > 0 ? (
-                            <>Mostrando {((page - 1) * PAGE_SIZE) + 1} - {Math.min(page * PAGE_SIZE, totalItems)} de {totalItems} fornecedores</>
-                        ) : (
-                            'Nenhum fornecedor encontrado'
-                        )}
-                    </p>
-                    <div className="flex gap-1">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={page <= 1}
-                            onClick={() => setPage(page - 1)}
-                        >
-                            <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={page >= totalPages}
-                            onClick={() => setPage(page + 1)}
-                        >
-                            <ChevronRight className="w-4 h-4" />
-                        </Button>
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30">
+                        <p className="text-sm text-muted-foreground">
+                            {totalItems > 0 ? (
+                                <>Mostrando {((page - 1) * PAGE_SIZE) + 1} - {Math.min(page * PAGE_SIZE, totalItems)} de {totalItems} fornecedores</>
+                            ) : (
+                                'Nenhum fornecedor encontrado'
+                            )}
+                        </p>
+                        <div className="flex gap-1">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={page <= 1}
+                                onClick={() => setPage(page - 1)}
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={page >= totalPages}
+                                onClick={() => setPage(page + 1)}
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </Button>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
 
             {/* Modal de detalhes */}
@@ -275,12 +369,18 @@ export default function FornecedoresPage() {
                                 </span>
                             </div>
                             <div className="flex justify-between py-2 border-b border-border">
+                                <span className="text-muted-foreground text-sm">Status</span>
+                                <Badge variant={selected.ativo ? "default" : "destructive"}>
+                                    {selected.ativo ? "Ativo" : "Inativo"}
+                                </Badge>
+                            </div>
+                            <div className="flex justify-between py-2 border-b border-border">
                                 <span className="text-muted-foreground text-sm">Email</span>
-                                <span className="text-card-foreground text-sm font-medium">{selected.email}</span>
+                                <span className="text-card-foreground text-sm font-medium">{selected.email || '—'}</span>
                             </div>
                             <div className="flex justify-between py-2 border-b border-border">
                                 <span className="text-muted-foreground text-sm">Telefone</span>
-                                <span className="text-card-foreground text-sm font-medium">{selected.phone}</span>
+                                <span className="text-card-foreground text-sm font-medium">{selected.phone || '—'}</span>
                             </div>
                             {selected.city && (
                                 <div className="flex justify-between py-2 border-b border-border">

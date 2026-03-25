@@ -1,286 +1,181 @@
-// ongsys-dashboard/src/lib/dashboard-queries.ts
-import { query } from './db'
-import { DashboardSummary, DateFilter, TopSupplier, TopItem, CostCenter } from './dashboard-types'
-import { getCostCenterName, costCentersMap } from './cost-centers-map'
+// src/lib/dashboard-queries.ts
+import {
+  pedidosService,
+  produtosService,
+  DateFilter
+} from './api/services'
+import { DashboardSummary, TopSupplier, TopItem, CostCenter, RecentAccount } from './dashboard-types'
+import { getCostCenterName } from './cost-centers-map'
 
-export async function getDashboardSummary(filters?: DateFilter): Promise<DashboardSummary> {
+// Função para extrair valor do pedido (soma dos itens)
+function extractValueFromPedido(pedido: any): number {
+  // Tentar encontrar valor no nível do pedido
+  if (pedido.valorTotal) return parseFloat(pedido.valorTotal)
+  if (pedido.valor_total) return parseFloat(pedido.valor_total)
+  if (pedido.total) return parseFloat(pedido.total)
+
+  // Tentar encontrar nos itens
+  if (pedido.itensPedido && Array.isArray(pedido.itensPedido)) {
+    const total = pedido.itensPedido.reduce((acc: number, item: any) => {
+      const quantidade = parseFloat(item.quantidade) || 0
+
+      let valorUnitario = 0
+      if (item.valorUnitario) valorUnitario = parseFloat(item.valorUnitario)
+      else if (item.precoUnitario) valorUnitario = parseFloat(item.precoUnitario)
+      else if (item.preco) valorUnitario = parseFloat(item.preco)
+      else if (item.valor) valorUnitario = parseFloat(item.valor)
+      else if (item.valorTotal) return acc + parseFloat(item.valorTotal)
+
+      return acc + (quantidade * valorUnitario)
+    }, 0)
+
+    if (total > 0) return total
+  }
+
+  return 0
+}
+
+export async function getDashboardSummaryFromAPI(filters?: DateFilter): Promise<DashboardSummary> {
   try {
     const { startDate, endDate, costCenter } = filters || {}
 
-    console.log('='.repeat(50))
-    console.log('🔍 FILTRO RECEBIDO:', { startDate, endDate, costCenter })
-    console.log('='.repeat(50))
+    console.log('🔍 Buscando dados do dashboard (apenas pedidos e produtos)...')
+    const startTime = Date.now()
 
-    // Preparar parâmetros da query
-    const queryParams: any[] = []
-    let paramIndex = 1
+    // 🔥 Buscar APENAS pedidos e produtos (removido contas e fornecedores)
+    const [pedidos, produtos] = await Promise.all([
+      pedidosService.listarTodos({ startDate, endDate }),
+      produtosService.listarTodos({ startDate, endDate })
+    ])
 
-    // Query base para produtos
-    let produtosQuery = `
-      SELECT 
-          COALESCE(COUNT(DISTINCT p.id), 0) as total_pedidos,
-          COALESCE(SUM(p.valor_total), 0) as valor_total
-      FROM pedidos p
-      WHERE LOWER(p.tipo_pedido) = 'produto'
-    `
+    const totalTime = Date.now() - startTime
+    console.log(`⏱️ Dados carregados em ${totalTime}ms`)
+    console.log(`📊 Dados recebidos:`)
+    console.log(`  - Pedidos: ${pedidos.length}`)
+    console.log(`  - Produtos: ${produtos.length}`)
 
-    // Query base para serviços
-    let servicosQuery = `
-      SELECT 
-          COALESCE(COUNT(DISTINCT p.id), 0) as total_pedidos,
-          COALESCE(SUM(p.valor_total), 0) as valor_total
-      FROM pedidos p
-      WHERE (LOWER(p.tipo_pedido) = 'serviço' OR LOWER(p.tipo_pedido) = 'servico')
-    `
-
-    // Aplicar filtros de data
-    if (startDate) {
-      const dateCondition = ` AND p.data_pedido >= $${paramIndex}`
-      produtosQuery += dateCondition
-      servicosQuery += dateCondition
-      queryParams.push(startDate)
-      paramIndex++
-    }
-
-    if (endDate) {
-      const dateCondition = ` AND p.data_pedido <= $${paramIndex}`
-      produtosQuery += dateCondition
-      servicosQuery += dateCondition
-      queryParams.push(endDate)
-      paramIndex++
-    }
-
-    // APLICAR FILTRO DE CENTRO DE CUSTO
+    // Filtrar pedidos por centro de custo (se necessário)
+    let pedidosFiltrados = pedidos
     if (costCenter && costCenter !== 'todos') {
-      const centerCondition = ` AND EXISTS (
-        SELECT 1 
-        FROM jsonb_array_elements(p.itens_pedido) as item
-        WHERE item->>'centroCusto' = $${paramIndex}
-      )`
-
-      produtosQuery += centerCondition
-      servicosQuery += centerCondition
-      queryParams.push(costCenter)
-      paramIndex++
+      pedidosFiltrados = pedidos.filter((pedido: any) =>
+        pedido.itensPedido?.some((item: any) => item.centroCusto === costCenter)
+      )
+      console.log(`  - Pedidos após filtro por centro ${costCenter}: ${pedidosFiltrados.length}`)
     }
 
-    console.log('📊 Query produtos:', produtosQuery)
-    console.log('📊 Parâmetros:', queryParams)
+    // Separar por tipo
+    const pedidosProduto = pedidosFiltrados.filter((p: any) =>
+      p.tipoPedido?.toLowerCase() === 'produto'
+    )
+    const pedidosServico = pedidosFiltrados.filter((p: any) =>
+      p.tipoPedido?.toLowerCase() === 'serviço' || p.tipoPedido?.toLowerCase() === 'servico'
+    )
 
-    // Executar queries de totais
-    const produtosResult = await query(produtosQuery, queryParams)
-    const servicosResult = await query(servicosQuery, queryParams)
+    // Calcular valores
+    const totalProductOrders = pedidosProduto.length
+    const totalProductOrdersValue = pedidosProduto.reduce((acc: number, p: any) => acc + extractValueFromPedido(p), 0)
+    const totalServiceOrders = pedidosServico.length
+    const totalServiceOrdersValue = pedidosServico.reduce((acc: number, p: any) => acc + extractValueFromPedido(p), 0)
 
-    const produtos = produtosResult.rows[0] || { total_pedidos: 0, valor_total: 0 }
-    const servicos = servicosResult.rows[0] || { total_pedidos: 0, valor_total: 0 }
+    // TOP 10 FORNECEDORES
+    const supplierMap = new Map<string, TopSupplier>()
+    pedidosFiltrados.forEach((pedido: any) => {
+      if (pedido.fornecedor?.nome) {
+        const key = pedido.fornecedor.documento || pedido.fornecedor.nome
+        if (!supplierMap.has(key)) {
+          supplierMap.set(key, {
+            name: pedido.fornecedor.nome,
+            document: pedido.fornecedor.documento || '---',
+            totalValue: 0,
+            orderCount: 0
+          })
+        }
+        const supplier = supplierMap.get(key)!
+        supplier.totalValue += extractValueFromPedido(pedido)
+        supplier.orderCount += 1
+      }
+    })
 
-    // Buscar TOP 10 FORNECEDORES com filtro
-    let topSuppliersQuery = `
-      SELECT 
-          p.fornecedor_nome as name,
-          p.fornecedor_documento as document,
-          SUM(p.valor_total) as total_value,
-          COUNT(DISTINCT p.id) as order_count
-      FROM pedidos p
-      WHERE p.fornecedor_nome IS NOT NULL 
-      AND p.fornecedor_nome != ''
-    `
+    const topSuppliers = Array.from(supplierMap.values())
+      .sort((a, b) => b.totalValue - a.totalValue)
+      .slice(0, 10)
 
-    const supplierParams: any[] = []
-    let supplierIndex = 1
+    // TOP 10 ITENS
+    const itemMap = new Map<string, TopItem>()
+    pedidosFiltrados.forEach((pedido: any) => {
+      pedido.itensPedido?.forEach((item: any) => {
+        const key = item.nomeServico || item.nomeProduto || 'Item sem nome'
+        if (!itemMap.has(key)) {
+          itemMap.set(key, {
+            name: key,
+            group: item.grupo || 'Sem grupo',
+            totalQuantity: 0,
+            totalValue: 0,
+            orderCount: 0
+          })
+        }
+        const mapped = itemMap.get(key)!
+        const quantity = parseFloat(item.quantidade) || 0
+        const unitValue = parseFloat(item.valorUnitario) || 0
+        mapped.totalQuantity += quantity
+        mapped.totalValue += quantity * unitValue
+        mapped.orderCount += 1
+      })
+    })
 
-    if (startDate) {
-      topSuppliersQuery += ` AND p.data_pedido >= $${supplierIndex}`
-      supplierParams.push(startDate)
-      supplierIndex++
-    }
-    if (endDate) {
-      topSuppliersQuery += ` AND p.data_pedido <= $${supplierIndex}`
-      supplierParams.push(endDate)
-      supplierIndex++
-    }
+    const topItems = Array.from(itemMap.values())
+      .sort((a, b) => b.totalValue - a.totalValue)
+      .slice(0, 10)
 
-    if (costCenter && costCenter !== 'todos') {
-      topSuppliersQuery += ` AND EXISTS (
-        SELECT 1 
-        FROM jsonb_array_elements(p.itens_pedido) as item
-        WHERE item->>'centroCusto' = $${supplierIndex}
-      )`
-      supplierParams.push(costCenter)
-      supplierIndex++
-    }
+    // CENTROS DE CUSTO
+    const costCenterSet = new Set<string>()
+    pedidos.forEach((pedido: any) => {
+      pedido.itensPedido?.forEach((item: any) => {
+        if (item.centroCusto) costCenterSet.add(item.centroCusto)
+      })
+    })
 
-    topSuppliersQuery += `
-      GROUP BY p.fornecedor_nome, p.fornecedor_documento
-      ORDER BY total_value DESC
-      LIMIT 10
-    `
+    const availableCostCenters = Array.from(costCenterSet)
+      .map(code => ({ code, name: getCostCenterName(code), totalValue: 0, orderCount: 0 }))
+      .sort((a, b) => a.name.localeCompare(b.name))
 
-    const topSuppliersResult = await query(topSuppliersQuery, supplierParams)
+    // UNIDADES DE MEDIDA
+    const unitMeasureMap = new Map<string, number>()
+    produtos.forEach((produto: any) => {
+      const unit = produto.unidadeMedida || 'Não informada'
+      unitMeasureMap.set(unit, (unitMeasureMap.get(unit) || 0) + 1)
+    })
 
-    // Buscar TOP 10 ITENS com filtro
-    let topItemsQuery = `
-      SELECT 
-          COALESCE(item->>'nomeServico', item->>'nomeProduto', 'Item sem nome') as name,
-          COALESCE(item->>'grupo', 'Sem grupo') as group,
-          SUM(COALESCE((item->>'quantidade')::numeric, 0)) as total_quantity,
-          SUM(
-            COALESCE((item->>'quantidade')::numeric, 0) * 
-            COALESCE((item->>'valorUnitario')::numeric, 0)
-          ) as total_value,
-          COUNT(DISTINCT p.id) as order_count
-      FROM pedidos p
-      CROSS JOIN LATERAL jsonb_array_elements(p.itens_pedido) as item
-      WHERE p.itens_pedido IS NOT NULL 
-      AND jsonb_array_length(p.itens_pedido) > 0
-    `
+    const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316']
+    const unitMeasureData = Array.from(unitMeasureMap.entries())
+      .map(([name, value], index) => ({ name, value, fill: COLORS[index % COLORS.length] }))
+      .slice(0, 8)
 
-    const itemParams: any[] = []
-    let itemIndex = 1
-
-    if (startDate) {
-      topItemsQuery += ` AND p.data_pedido >= $${itemIndex}`
-      itemParams.push(startDate)
-      itemIndex++
-    }
-    if (endDate) {
-      topItemsQuery += ` AND p.data_pedido <= $${itemIndex}`
-      itemParams.push(endDate)
-      itemIndex++
-    }
-
-    if (costCenter && costCenter !== 'todos') {
-      topItemsQuery += ` AND item->>'centroCusto' = $${itemIndex}`
-      itemParams.push(costCenter)
-      itemIndex++
-    }
-
-    topItemsQuery += `
-      GROUP BY item->>'nomeServico', item->>'nomeProduto', item->>'grupo'
-      ORDER BY total_value DESC
-      LIMIT 10
-    `
-
-    const topItemsResult = await query(topItemsQuery, itemParams)
-
-    // Buscar outros dados (sem filtro de centro pois são globais)
-    const fornecedoresResult = await query(`SELECT COUNT(*) as total FROM fornecedores`, [])
-    const pagarResult = await query(`SELECT COALESCE(SUM(valor_liquido), 0) as total FROM contas_pagar`, [])
-    const receberResult = await query(`SELECT COALESCE(SUM(valor_liquido), 0) as total FROM contas_receber`, [])
-
-    // Buscar distribuição por unidade de medida
-    const unitMeasureResult = await query(`
-      SELECT 
-          COALESCE(unidadeMedida, 'Não informada') as name,
-          COUNT(*) as value
-      FROM produtos
-      GROUP BY unidadeMedida
-      ORDER BY value DESC
-      LIMIT 8
-    `, [])
-
-    // Buscar centros de custo disponíveis para o select
-    const availableCostCenters = await getAvailableCostCenters(startDate, endDate)
-
-    const COLORS = [
-      '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
-      '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'
-    ]
-
-    // Mapear resultados
-    const topSuppliers: TopSupplier[] = topSuppliersResult.rows.map((row: any) => ({
-      name: row.name || 'Nome não informado',
-      document: row.document || '---',
-      totalValue: parseFloat(row.total_value) || 0,
-      orderCount: parseInt(row.order_count) || 0
-    }))
-
-    const topItems: TopItem[] = topItemsResult.rows.map((row: any) => ({
-      name: row.name || 'Item sem nome',
-      group: row.group || 'Sem grupo',
-      totalQuantity: parseFloat(row.total_quantity) || 0,
-      totalValue: parseFloat(row.total_value) || 0,
-      orderCount: parseInt(row.order_count) || 0
-    }))
-
-    console.log('📊 RESULTADOS FILTRADOS:')
-    console.log('  - Centro filtrado:', costCenter || 'todos')
-    console.log('  - Total produtos:', produtos.total_pedidos)
-    console.log('  - Total serviços:', servicos.total_pedidos)
-    console.log('  - Top fornecedor:', topSuppliers[0]?.name || 'Nenhum')
-    console.log('  - Pedidos top fornecedor:', topSuppliers[0]?.orderCount || 0)
+    console.log('📊 RESUMO FINAL:')
+    console.log(`  - Total Pedidos Produto: ${totalProductOrders}`)
+    console.log(`  - Valor Total Produtos: R$ ${totalProductOrdersValue.toFixed(2)}`)
+    console.log(`  - Total Pedidos Serviço: ${totalServiceOrders}`)
+    console.log(`  - Valor Total Serviços: R$ ${totalServiceOrdersValue.toFixed(2)}`)
+    console.log(`  - Top Fornecedor: ${topSuppliers[0]?.name || 'Nenhum'}`)
+    console.log(`  - Top Item: ${topItems[0]?.name || 'Nenhum'}`)
 
     return {
-      totalProductOrders: parseInt(produtos.total_pedidos) || 0,
-      totalProductOrdersValue: parseFloat(produtos.valor_total) || 0,
-      totalServiceOrders: parseInt(servicos.total_pedidos) || 0,
-      totalServiceOrdersValue: parseFloat(servicos.valor_total) || 0,
-      totalSuppliers: parseInt(fornecedoresResult.rows[0]?.total) || 0,
-      totalPayable: parseFloat(pagarResult.rows[0]?.total) || 0,
-      totalReceivable: parseFloat(receberResult.rows[0]?.total) || 0,
+      totalProductOrders,
+      totalProductOrdersValue,
+      totalServiceOrders,
+      totalServiceOrdersValue,
+      totalSuppliers: 0,
+      totalPayable: 0,
+      totalReceivable: 0,
       lowStockProducts: 0,
       topSuppliers,
       topItems,
       availableCostCenters,
-      unitMeasureData: unitMeasureResult.rows.map((row: any, index: number) => ({
-        name: row.name || 'Não informada',
-        value: parseInt(row.value) || 0,
-        fill: COLORS[index % COLORS.length]
-      })),
+      unitMeasureData,
       recentAccounts: []
     }
   } catch (error) {
-    console.error('Erro ao buscar dados do dashboard:', error)
+    console.error('❌ Erro ao buscar dados:', error)
     throw error
-  }
-}
-
-async function getAvailableCostCenters(startDate?: string, endDate?: string): Promise<CostCenter[]> {
-  try {
-    let queryText = `
-      SELECT DISTINCT 
-          item->>'centroCusto' as code,
-          COUNT(*) as total
-      FROM pedidos p
-      CROSS JOIN LATERAL jsonb_array_elements(p.itens_pedido) as item
-      WHERE p.itens_pedido IS NOT NULL 
-      AND jsonb_array_length(p.itens_pedido) > 0
-      AND item->>'centroCusto' IS NOT NULL 
-      AND item->>'centroCusto' != ''
-    `
-
-    const params: any[] = []
-    let paramIndex = 1
-
-    if (startDate) {
-      queryText += ` AND p.data_pedido >= $${paramIndex}`
-      params.push(startDate)
-      paramIndex++
-    }
-    if (endDate) {
-      queryText += ` AND p.data_pedido <= $${paramIndex}`
-      params.push(endDate)
-      paramIndex++
-    }
-
-    queryText += ` GROUP BY item->>'centroCusto' ORDER BY total DESC LIMIT 50`
-
-    const result = await query(queryText, params)
-
-    // Usar o mapa para substituir os códigos pelos nomes
-    return result.rows
-      .map((row: any) => {
-        const code = row.code || 'Não informado'
-        return {
-          code: code,
-          name: getCostCenterName(code), // Aqui substituímos pelo nome
-          totalValue: 0,
-          orderCount: parseInt(row.total) || 0
-        }
-      })
-      .sort((a, b) => a.name.localeCompare(b.name)) // Ordenar por nome
-  } catch (error) {
-    console.error('Erro ao buscar centros de custo:', error)
-    return []
   }
 }

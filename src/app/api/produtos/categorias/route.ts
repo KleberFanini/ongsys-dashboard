@@ -1,36 +1,23 @@
-import { NextResponse } from 'next/server'
-import { query } from '@/src/lib/db'
+import { NextResponse } from 'next/server';
+import { produtosService } from '@/src/lib/api/services';
 
 export async function GET() {
     try {
-        // Buscar categorias
-        const categoriasResult = await query(`
-            SELECT DISTINCT grupo as categoria
-            FROM produtos 
-            WHERE grupo IS NOT NULL AND grupo != ''
-            ORDER BY grupo
-        `)
+        const allProducts = await produtosService.listarTodos({});
 
-        // Buscar status disponíveis
-        const statusResult = await query(`
-            SELECT DISTINCT status
-            FROM produtos 
-            WHERE status IS NOT NULL AND status != ''
-            ORDER BY status
-        `)
+        const categorias = [...new Set(allProducts.map((p: any) => p.grupo || 'Sem categoria').filter(Boolean))];
 
-        const categorias = categoriasResult.rows.map(row => row.categoria)
-        const statusList = statusResult.rows.map(row => row.status)
+        const statusList = ['ativo', 'inativo'];
 
         return NextResponse.json({
-            categorias,
+            categorias: categorias.sort(),
             statusList
-        })
+        });
     } catch (error) {
-        console.error('Erro ao buscar categorias:', error)
+        console.error('Erro ao buscar categorias:', error);
         return NextResponse.json(
             { error: 'Erro interno do servidor' },
             { status: 500 }
-        )
+        );
     }
 }
