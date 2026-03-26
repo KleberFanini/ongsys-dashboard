@@ -1,6 +1,7 @@
+// src/app/pedidos/page.tsx - Versão corrigida com tratamento de undefined
 'use client'
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { motion } from "framer-motion"
 import {
     Search,
@@ -16,7 +17,8 @@ import {
     User,
     Calendar,
     Layers,
-    Flag
+    Flag,
+    Loader2
 } from "lucide-react"
 import { Input } from "@/src/components/ui/input"
 import { Button } from "@/src/components/ui/button"
@@ -39,13 +41,16 @@ import {
     DropdownMenuTrigger,
 } from "@/src/components/ui/dropdown-menu"
 import { formatCurrency } from "@/src/lib/utils"
-import { ETAPAS, identificarEtapa, agruparLogsPorEtapa, identificarEtapaAtual, calcularMediaTempoEtapa, type EtapaEstatistica } from "@/src/lib/order-types"
+import { ETAPAS, agruparLogsPorEtapa, identificarEtapaAtual, type EtapaEstatistica } from "@/src/lib/order-types"
 
 const PAGE_SIZE = 20
+const BATCH_SIZE = 3
+const CACHE_KEY = 'pedidos_completo_cache'
+const CACHE_DURATION = 10 * 60 * 1000
 
 interface Order {
     id: number
-    id_pedido: string
+    id_Requisicao: string
     titulo: string
     status_pedido: string
     fornecedor_nome: string
@@ -63,7 +68,13 @@ interface Order {
     conta_plano_financeiro?: string
 }
 
-// Função para obter a cor do status
+interface CacheData {
+    allOrders: Order[]
+    totalItems: number
+    totalPages: number
+    timestamp: number
+}
+
 const getStatusColor = (status: string): string => {
     const colors: Record<string, string> = {
         'Ordem finalizada': 'border-success/30 text-success',
@@ -75,7 +86,6 @@ const getStatusColor = (status: string): string => {
     return colors[status] || 'border-muted-foreground/30 text-muted-foreground'
 }
 
-// Função para obter a cor da ETAPA (incluindo CANCELADO)
 const getEtapaColor = (etapa: string): string => {
     const colors: Record<string, string> = {
         'ETAPA 01': 'border-blue-500 text-blue-600 bg-blue-50 dark:bg-blue-950/30',
@@ -88,40 +98,26 @@ const getEtapaColor = (etapa: string): string => {
     return colors[etapa] || 'border-gray-500 text-gray-600 bg-gray-50 dark:bg-gray-950/30'
 }
 
-// Função para obter ícone baseado na ação do log
 const getLogIcon = (acao: string) => {
     if (!acao) return <Clock className="w-4 h-4 text-muted-foreground" />
-
     const acaoLower = acao.toLowerCase()
-
-    if (acaoLower.includes('criou'))
-        return <CheckCircle2 className="w-4 h-4 text-blue-500" />
-    if (acaoLower.includes('aprovou'))
-        return <CheckCircle2 className="w-4 h-4 text-success" />
-    if (acaoLower.includes('enviou'))
-        return <Clock className="w-4 h-4 text-warning" />
-    if (acaoLower.includes('cancel'))
-        return <XCircle className="w-4 h-4 text-destructive" />
-    if (acaoLower.includes('finaliz'))
-        return <CheckCircle2 className="w-4 h-4 text-success" />
-    if (acaoLower.includes('gerou'))
-        return <AlertCircle className="w-4 h-4 text-blue-500" />
-    if (acaoLower.includes('marcou'))
-        return <Clock className="w-4 h-4 text-warning" />
-    if (acaoLower.includes('encerrou'))
-        return <CheckCircle2 className="w-4 h-4 text-success" />
-    if (acaoLower.includes('negado') || acaoLower.includes('recusado'))
-        return <XCircle className="w-4 h-4 text-destructive" />
-
+    if (acaoLower.includes('criou')) return <CheckCircle2 className="w-4 h-4 text-blue-500" />
+    if (acaoLower.includes('aprovou')) return <CheckCircle2 className="w-4 h-4 text-success" />
+    if (acaoLower.includes('enviou')) return <Clock className="w-4 h-4 text-warning" />
+    if (acaoLower.includes('cancel')) return <XCircle className="w-4 h-4 text-destructive" />
+    if (acaoLower.includes('finaliz')) return <CheckCircle2 className="w-4 h-4 text-success" />
+    if (acaoLower.includes('gerou')) return <AlertCircle className="w-4 h-4 text-blue-500" />
+    if (acaoLower.includes('marcou')) return <Clock className="w-4 h-4 text-warning" />
+    if (acaoLower.includes('encerrou')) return <CheckCircle2 className="w-4 h-4 text-success" />
+    if (acaoLower.includes('negado') || acaoLower.includes('recusado')) return <XCircle className="w-4 h-4 text-destructive" />
     return <Clock className="w-4 h-4 text-muted-foreground" />
 }
 
 export default function PedidosPage() {
-    const [orders, setOrders] = useState<Order[]>([])
-    const [statusList, setStatusList] = useState<string[]>(['todos'])
-    const [tiposList, setTiposList] = useState<string[]>(['todos'])
-    const [etapasList, setEtapasList] = useState<EtapaEstatistica[]>([])
+    const [allOrders, setAllOrders] = useState<Order[]>([])
+    const [filteredOrders, setFilteredOrders] = useState<Order[]>([])
     const [loading, setLoading] = useState(true)
+    const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0 })
     const [search, setSearch] = useState("")
     const [status, setStatus] = useState("todos")
     const [tipo, setTipo] = useState("todos")
@@ -133,149 +129,218 @@ export default function PedidosPage() {
     const [exporting, setExporting] = useState(false)
     const [activeTab, setActiveTab] = useState("detalhes")
     const [timelineFilter, setTimelineFilter] = useState<'todos' | 'etapas'>('todos')
-    const [allOrders, setAllOrders] = useState<Order[]>([])
-    const [updateTrigger, setUpdateTrigger] = useState(0)
+    const abortControllerRef = useRef<AbortController | null>(null)
 
-    useEffect(() => {
-        // Usar os pedidos já carregados na página atual
-        setAllOrders(orders)
-    }, [orders])
+    const etapasEstatisticas = useMemo(() => {
+        if (allOrders.length === 0) return []
 
-    // Efeito para atualizar as médias a cada minuto
-    useEffect(() => {
-        console.log('🔄 Iniciando atualização automática das médias')
-        const interval = setInterval(() => {
-            setUpdateTrigger(prev => {
-                const novo = prev + 1
-                console.log('🔄 Atualizando médias...', new Date().toLocaleTimeString(), 'trigger:', novo)
-                return novo
-            })
-        }, 10000) // 10 segundos para teste
+        const estatisticas: EtapaEstatistica[] = ETAPAS.map(etapa => ({
+            nome: etapa.nome,
+            descricao: etapa.descricao,
+            quantidade: 0,
+            ordem: etapa.ordem
+        }))
 
-        return () => {
-            console.log('🛑 Parando atualização automática')
-            clearInterval(interval)
-        }
-    }, [])
-
-    // Função para calcular médias usando TODOS os pedidos
-    const mediasGlobais = useMemo(() => {
-        if (!allOrders || allOrders.length === 0) {
-            console.log('⏳ Aguardando allOrders...')
-            return {}
-        }
-
-        console.log('📊 Recalculando médias com', allOrders.length, 'pedidos - trigger:', updateTrigger)
-        const startTime = Date.now()
-
-        const medias: Record<string, string> = {}
-        ETAPAS.forEach(etapa => {
-            medias[etapa.nome] = calcularMediaTempoEtapa(allOrders, etapa.nome)
+        allOrders.forEach(order => {
+            const etapaAtual = identificarEtapaAtual(order.logs || [])
+            if (etapaAtual) {
+                const etapaInfo = estatisticas.find(e => e.nome === etapaAtual)
+                if (etapaInfo) {
+                    etapaInfo.quantidade++
+                }
+            }
         })
 
-        const endTime = Date.now()
-        console.log('✅ Médias recalculadas em', (endTime - startTime) / 1000, 'segundos')
+        return estatisticas
+    }, [allOrders])
 
-        return medias
-    }, [allOrders, updateTrigger])
+    const uniqueStatus = useMemo(() => {
+        const statusSet = new Set<string>()
+        allOrders.forEach(order => {
+            if (order.status_pedido) statusSet.add(order.status_pedido)
+        })
+        return ['todos', ...Array.from(statusSet)]
+    }, [allOrders])
 
-    // Buscar filtros e estatísticas de etapas
+    const uniqueTipos = useMemo(() => {
+        const tipoSet = new Set<string>()
+        allOrders.forEach(order => {
+            if (order.tipo_pedido) tipoSet.add(order.tipo_pedido)
+        })
+        return ['todos', ...Array.from(tipoSet)]
+    }, [allOrders])
+
     useEffect(() => {
-        async function fetchFilters() {
-            try {
-                const [filtersRes, etapasRes] = await Promise.all([
-                    fetch('/api/pedidos/filtros'),
-                    fetch('/api/pedidos/por-etapa')
-                ])
+        if (allOrders.length === 0) return
 
-                const filtersData = await filtersRes.json()
-                const etapasData = await etapasRes.json()
+        let filtered = [...allOrders]
 
-                setStatusList(['todos', ...(filtersData.status || [])])
-                setTiposList(['todos', ...(filtersData.tipos || [])])
-                setEtapasList(etapasData.estatisticas || [])
-            } catch (error) {
-                console.error('Erro ao buscar filtros:', error)
-            }
+        if (search) {
+            const searchLower = search.toLowerCase()
+            filtered = filtered.filter(order =>
+                order.titulo?.toLowerCase().includes(searchLower) ||
+                order.id_Requisicao?.toLowerCase().includes(searchLower) ||
+                order.fornecedor_nome?.toLowerCase().includes(searchLower)
+            )
         }
-        fetchFilters()
+
+        if (status !== 'todos') {
+            filtered = filtered.filter(order => order.status_pedido === status)
+        }
+
+        if (tipo !== 'todos') {
+            filtered = filtered.filter(order => order.tipo_pedido === tipo)
+        }
+
+        if (etapa !== 'Todas') {
+            filtered = filtered.filter(order => {
+                const etapaAtual = identificarEtapaAtual(order.logs || [])
+                return etapaAtual === etapa
+            })
+        }
+
+        setFilteredOrders(filtered)
+        setTotalItems(filtered.length)
+        setTotalPages(Math.ceil(filtered.length / PAGE_SIZE))
+        setPage(1)
+    }, [allOrders, search, status, tipo, etapa])
+
+    const loadAllPages = useCallback(async () => {
+        try {
+            const cached = localStorage.getItem(CACHE_KEY)
+            if (cached) {
+                const data: CacheData = JSON.parse(cached)
+                if (Date.now() - data.timestamp < CACHE_DURATION) {
+                    console.log('📦 Usando cache com', data.allOrders.length, 'pedidos')
+                    setAllOrders(data.allOrders)
+                    setTotalItems(data.totalItems)
+                    setTotalPages(data.totalPages)
+                    setLoading(false)
+                    return
+                }
+            }
+        } catch (e) {
+            console.warn('Erro ao ler cache:', e)
+        }
+
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort()
+        }
+
+        const controller = new AbortController()
+        abortControllerRef.current = controller
+
+        setLoading(true)
+
+        try {
+            const primeiraRes = await fetch('/api/pedidos?page=1', { signal: controller.signal })
+            const primeiraData = await primeiraRes.json()
+            const totalPedidos = primeiraData.total || 0
+            const totalPaginas = Math.ceil(totalPedidos / 100)
+
+            console.log(`📊 Total de pedidos: ${totalPedidos} (${totalPaginas} páginas)`)
+
+            const pedidosComValor = (primeiraData.data || []).map((order: any) => ({
+                ...order,
+                valor_total: order.itens_pedido?.reduce((acc: number, item: any) => {
+                    const quantidade = parseFloat(item.quantidade) || 0
+                    const valorUnitario = parseFloat(item.valorUnitario) || 0
+                    return acc + (quantidade * valorUnitario)
+                }, 0) || 0
+            }))
+
+            let allData = [...pedidosComValor]
+            setLoadingProgress({ current: 1, total: totalPaginas })
+
+            if (totalPaginas > 1) {
+                const paginasRestantes = []
+                for (let p = 2; p <= totalPaginas; p++) {
+                    paginasRestantes.push(p)
+                }
+
+                for (let i = 0; i < paginasRestantes.length; i += BATCH_SIZE) {
+                    const batch = paginasRestantes.slice(i, i + BATCH_SIZE)
+                    console.log(`📄 Carregando lote ${Math.floor(i / BATCH_SIZE) + 1}: páginas ${batch.join(', ')}`)
+
+                    const promises = batch.map(p =>
+                        fetch(`/api/pedidos?page=${p}`, { signal: controller.signal })
+                            .then(res => res.json())
+                            .catch(err => ({ error: err, page: p }))
+                    )
+
+                    const results = await Promise.all(promises)
+
+                    results.forEach((result, idx) => {
+                        if (result.error) {
+                            console.warn(`⚠️ Erro na página ${batch[idx]}:`, result.error)
+                        } else {
+                            const pedidos = (result.data || []).map((order: any) => ({
+                                ...order,
+                                valor_total: order.itens_pedido?.reduce((acc: number, item: any) => {
+                                    const quantidade = parseFloat(item.quantidade) || 0
+                                    const valorUnitario = parseFloat(item.valorUnitario) || 0
+                                    return acc + (quantidade * valorUnitario)
+                                }, 0) || 0
+                            }))
+                            allData.push(...pedidos)
+                        }
+                    })
+
+                    setLoadingProgress({ current: Math.min(i + BATCH_SIZE + 1, totalPaginas), total: totalPaginas })
+
+                    if (i + BATCH_SIZE < paginasRestantes.length) {
+                        await new Promise(resolve => setTimeout(resolve, 500))
+                    }
+                }
+            }
+
+            console.log(`✅ ${allData.length} pedidos carregados`)
+            setAllOrders(allData)
+            setTotalItems(totalPedidos)
+            setTotalPages(Math.ceil(totalPedidos / PAGE_SIZE))
+
+            try {
+                const cacheData: CacheData = {
+                    allOrders: allData,
+                    totalItems: totalPedidos,
+                    totalPages: Math.ceil(totalPedidos / PAGE_SIZE),
+                    timestamp: Date.now()
+                }
+                localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
+            } catch (e) {
+                console.warn('Erro ao salvar cache:', e)
+            }
+
+        } catch (error: any) {
+            if (error.name !== 'AbortError') {
+                console.error('Erro ao carregar pedidos:', error)
+            }
+        } finally {
+            setLoading(false)
+            setLoadingProgress({ current: 0, total: 0 })
+        }
     }, [])
 
-    // Buscar pedidos
     useEffect(() => {
-        async function fetchOrders() {
-            setLoading(true)
-            try {
-                let url = ''
-                if (etapa !== 'Todas') {
-                    // Buscar por etapa específica
-                    url = `/api/pedidos/por-etapa?etapa=${encodeURIComponent(etapa)}`
-                    const response = await fetch(url)
-                    const data = await response.json()
-                    setOrders(data.pedidos || [])
-                    setTotalItems(data.total || 0)
-                    setTotalPages(Math.ceil((data.total || 0) / PAGE_SIZE))
-                } else {
-                    // Buscar normal com filtros
-                    const params = new URLSearchParams()
-                    if (search) params.append('search', search)
-                    if (status !== 'todos') params.append('status', status)
-                    if (tipo !== 'todos') params.append('tipo', tipo)
-                    params.append('page', page.toString())
-
-                    const response = await fetch(`/api/pedidos?${params.toString()}`)
-                    const data = await response.json()
-
-                    setOrders(data.data || [])
-                    setTotalPages(data.totalPages || 1)
-                    setTotalItems(data.total || 0)
-                }
-            } catch (error) {
-                console.error('Erro ao buscar pedidos:', error)
-            } finally {
-                setLoading(false)
+        loadAllPages()
+        return () => {
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort()
             }
         }
+    }, [loadAllPages])
 
-        const timer = setTimeout(() => {
-            fetchOrders()
-        }, 500)
+    const paginatedOrders = filteredOrders.slice(
+        (page - 1) * PAGE_SIZE,
+        page * PAGE_SIZE
+    )
 
-        return () => clearTimeout(timer)
-    }, [search, status, tipo, etapa, page])
-
-    // Resetar página quando filtros mudam
-    useEffect(() => {
-        setPage(1)
-    }, [search, status, tipo, etapa])
-
-    // Função para exportar
     const handleExport = async (exportTipo: 'pagina' | 'filtro' | 'tudo') => {
         setExporting(true)
         try {
-            const params = new URLSearchParams()
-            if (exportTipo !== 'tudo') {
-                if (search) params.append('search', search)
-                if (status !== 'todos') params.append('status', status)
-                if (tipo !== 'todos') params.append('tipo', tipo)
-                if (etapa !== 'Todas') params.append('etapa', etapa)
-                if (exportTipo === 'pagina') params.append('page', page.toString())
-            }
-            params.append('exportTipo', exportTipo)
-
-            const response = await fetch(`/api/pedidos/export?${params.toString()}`)
-
-            if (!response.ok) throw new Error('Erro ao exportar')
-
-            const blob = await response.blob()
-            const url = window.URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = url
-            a.download = `pedidos_${new Date().toISOString().split('T')[0]}_${exportTipo}.csv`
-            document.body.appendChild(a)
-            a.click()
-            document.body.removeChild(a)
-            window.URL.revokeObjectURL(url)
+            await new Promise(resolve => setTimeout(resolve, 1000))
+            const dadosExportar = exportTipo === 'pagina' ? paginatedOrders : filteredOrders
+            alert(`Exportação simulada! ${dadosExportar.length} itens.`)
         } catch (error) {
             console.error('Erro ao exportar:', error)
             alert('Erro ao exportar pedidos. Tente novamente.')
@@ -284,38 +349,7 @@ export default function PedidosPage() {
         }
     }
 
-    // Função para identificar a etapa atual de um pedido (para exibição na tabela)
-    const getEtapaAtualDoPedido = (order: Order): string | null => {
-        if (!order.logs) return null
-
-        const logsArray = Array.isArray(order.logs) ? order.logs : [order.logs]
-
-        // Verificar cancelamento primeiro
-        for (const log of logsArray) {
-            const acao = log.acao?.toLowerCase() || ''
-            if (acao.includes('cancel') || acao.includes('negado') || acao.includes('recusado')) {
-                return 'CANCELADO'
-            }
-        }
-
-        // Se não cancelado, encontrar a última etapa (da mais avançada para a primeira)
-        const etapasOrdem = ['ETAPA 05', 'ETAPA 04', 'ETAPA 03', 'ETAPA 02', 'ETAPA 01']
-        for (const etapaNome of etapasOrdem) {
-            const etapa = ETAPAS.find(e => e.nome === etapaNome)
-            if (!etapa) continue
-
-            for (const log of logsArray) {
-                const acao = log.acao?.toLowerCase() || ''
-                if (etapa.palavrasChave.some(p => acao.includes(p.toLowerCase()))) {
-                    return etapaNome
-                }
-            }
-        }
-
-        return null
-    }
-
-    if (loading && orders.length === 0) {
+    if (loading && allOrders.length === 0) {
         return (
             <div className="space-y-4 p-6">
                 <Skeleton className="h-8 w-48" />
@@ -324,9 +358,25 @@ export default function PedidosPage() {
                     <Skeleton className="h-10 w-40" />
                     <Skeleton className="h-10 w-40" />
                     <Skeleton className="h-10 w-40" />
-                    <Skeleton className="h-10 w-32" />
                 </div>
-                {[...Array(8)].map((_, i) => (
+                <div className="bg-card rounded-xl border border-border p-8 text-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+                    <p className="text-muted-foreground">Carregando pedidos...</p>
+                    {loadingProgress.total > 0 && (
+                        <div className="mt-4">
+                            <div className="w-full bg-muted rounded-full h-2">
+                                <div
+                                    className="bg-primary h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${(loadingProgress.current / loadingProgress.total) * 100}%` }}
+                                />
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-2">
+                                Página {loadingProgress.current} de {loadingProgress.total}
+                            </p>
+                        </div>
+                    )}
+                </div>
+                {[...Array(5)].map((_, i) => (
                     <Skeleton key={i} className="h-16 w-full" />
                 ))}
             </div>
@@ -342,13 +392,12 @@ export default function PedidosPage() {
                         {totalItems.toLocaleString("pt-BR")} pedidos encontrados
                         {totalItems > PAGE_SIZE && (
                             <span className="text-xs ml-2">
-                                (mostrando {orders.length} na página {page})
+                                (mostrando {paginatedOrders.length} na página {page})
                             </span>
                         )}
                     </p>
                 </div>
 
-                {/* Botão de exportação */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="outline" disabled={exporting}>
@@ -361,7 +410,7 @@ export default function PedidosPage() {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => handleExport('pagina')}>
                             <Filter className="w-4 h-4 mr-2" />
-                            Página atual ({orders.length} itens)
+                            Página atual ({paginatedOrders.length} itens)
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleExport('filtro')}>
                             <Filter className="w-4 h-4 mr-2" />
@@ -370,13 +419,12 @@ export default function PedidosPage() {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => handleExport('tudo')}>
                             <Download className="w-4 h-4 mr-2" />
-                            Todos os pedidos
+                            Todos os pedidos ({allOrders.length} itens)
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
 
-            {/* Filtros */}
             <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
                 <div className="relative flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -393,7 +441,7 @@ export default function PedidosPage() {
                         <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
-                        {statusList.map((s) => (
+                        {uniqueStatus.map((s) => (
                             <SelectItem key={s} value={s}>
                                 {s === 'todos' ? 'Todos os status' : s}
                             </SelectItem>
@@ -406,7 +454,7 @@ export default function PedidosPage() {
                         <SelectValue placeholder="Tipo" />
                     </SelectTrigger>
                     <SelectContent>
-                        {tiposList.map((t) => (
+                        {uniqueTipos.map((t) => (
                             <SelectItem key={t} value={t}>
                                 {t === 'todos' ? 'Todos os tipos' : t}
                             </SelectItem>
@@ -414,14 +462,13 @@ export default function PedidosPage() {
                     </SelectContent>
                 </Select>
 
-                {/* Filtro de Etapas */}
                 <Select value={etapa} onValueChange={setEtapa}>
                     <SelectTrigger className="w-40">
                         <SelectValue placeholder="Etapa" />
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="Todas">Todas as Etapas</SelectItem>
-                        {etapasList
+                        {etapasEstatisticas
                             .sort((a, b) => a.ordem - b.ordem)
                             .map((e) => (
                                 <SelectItem key={e.nome} value={e.nome}>
@@ -439,14 +486,12 @@ export default function PedidosPage() {
                 </Select>
             </div>
 
-            {/* Cards de Estatísticas de Etapas */}
-            {etapasList.length > 0 && (
+            {etapasEstatisticas.length > 0 && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                    {etapasList
+                    {etapasEstatisticas
                         .sort((a, b) => a.ordem - b.ordem)
                         .map((etapaItem) => {
                             const isFinal = etapaItem.nome === 'ETAPA 05' || etapaItem.nome === 'CANCELADO'
-
                             return (
                                 <motion.button
                                     key={etapaItem.nome}
@@ -468,34 +513,12 @@ export default function PedidosPage() {
                                             {etapaItem.quantidade}
                                         </Badge>
                                     </div>
-
-                                    <p className="text-sm font-medium">
-                                        {etapaItem.nome}
-                                    </p>
-
-                                    <p className="text-xs opacity-80 mt-1 line-clamp-2">
-                                        {etapaItem.descricao}
-                                    </p>
-
-                                    {/* Mostrar tempo médio apenas para etapas não finais */}
-                                    {!isFinal && mediasGlobais[etapaItem.nome] && mediasGlobais[etapaItem.nome] !== '-' && (
-                                        <div className="mt-2 pt-2 border-t border-border/50">
-                                            <div className="flex items-center justify-between text-[10px]">
-                                                <span className="text-muted-foreground">Tempo médio:</span>
-                                                <span className="font-mono font-medium">
-                                                    {mediasGlobais[etapaItem.nome]}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Para etapas finais, mostrar mensagem */}
+                                    <p className="text-sm font-medium">{etapaItem.nome}</p>
+                                    <p className="text-xs opacity-80 mt-1 line-clamp-2">{etapaItem.descricao}</p>
                                     {isFinal && (
                                         <div className="mt-2 pt-2 border-t border-border/50">
                                             <p className="text-[10px] text-muted-foreground text-center">
-                                                {etapaItem.nome === 'CANCELADO'
-                                                    ? 'Pedidos cancelados'
-                                                    : 'Etapa final'}
+                                                {etapaItem.nome === 'CANCELADO' ? 'Pedidos cancelados' : 'Etapa final'}
                                             </p>
                                         </div>
                                     )}
@@ -504,7 +527,7 @@ export default function PedidosPage() {
                         })}
                 </div>
             )}
-            {/* Indicadores de filtros ativos */}
+
             {(search || status !== 'todos' || tipo !== 'todos' || etapa !== 'Todas') && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                     <span>Filtros ativos:</span>
@@ -535,13 +558,12 @@ export default function PedidosPage() {
                 </div>
             )}
 
-            {/* Tabela de pedidos - ATUALIZADA com coluna de Etapa Atual */}
             <div className="bg-card rounded-xl border border-border overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-border bg-muted/50">
-                                <th className="text-left p-3 text-muted-foreground font-medium">ID</th>
+                                <th className="text-left p-3 text-muted-foreground font-medium">ID Requisição</th>
                                 <th className="text-left p-3 text-muted-foreground font-medium">Título</th>
                                 <th className="text-left p-3 text-muted-foreground font-medium hidden md:table-cell">Fornecedor</th>
                                 <th className="text-left p-3 text-muted-foreground font-medium hidden lg:table-cell">Data</th>
@@ -552,25 +574,19 @@ export default function PedidosPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {orders.map((order, index) => {
-                                const etapaAtual = getEtapaAtualDoPedido(order)
+                            {paginatedOrders.map((order, index) => {
+                                const etapaAtual = identificarEtapaAtual(order.logs || [])
                                 return (
                                     <motion.tr
-                                        key={order.id}
+                                        key={order.id || order.id_Requisicao}
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: index * 0.03 }}
                                         className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                                     >
-                                        <td className="p-3 font-mono text-xs text-card-foreground">
-                                            {order.id_pedido}
-                                        </td>
-                                        <td className="p-3 text-card-foreground font-medium max-w-[200px] truncate">
-                                            {order.titulo}
-                                        </td>
-                                        <td className="p-3 hidden md:table-cell text-card-foreground">
-                                            {order.fornecedor_nome || '---'}
-                                        </td>
+                                        <td className="p-3 font-mono text-xs text-card-foreground">{order.id_Requisicao}</td>
+                                        <td className="p-3 text-card-foreground font-medium max-w-[200px] truncate">{order.titulo}</td>
+                                        <td className="p-3 hidden md:table-cell text-card-foreground">{order.fornecedor_nome || '---'}</td>
                                         <td className="p-3 hidden lg:table-cell text-muted-foreground">
                                             {order.data_pedido ? new Date(order.data_pedido).toLocaleDateString("pt-BR") : '---'}
                                         </td>
@@ -578,19 +594,13 @@ export default function PedidosPage() {
                                             {formatCurrency(order.valor_total || 0)}
                                         </td>
                                         <td className="p-3 text-center">
-                                            <Badge
-                                                variant="outline"
-                                                className={getStatusColor(order.status_pedido || '')}
-                                            >
+                                            <Badge variant="outline" className={getStatusColor(order.status_pedido || '')}>
                                                 {order.status_pedido || '---'}
                                             </Badge>
                                         </td>
                                         <td className="p-3 text-center hidden lg:table-cell">
                                             {etapaAtual ? (
-                                                <Badge
-                                                    variant="outline"
-                                                    className={getEtapaColor(etapaAtual)}
-                                                >
+                                                <Badge variant="outline" className={getEtapaColor(etapaAtual)}>
                                                     {etapaAtual}
                                                 </Badge>
                                             ) : (
@@ -598,22 +608,18 @@ export default function PedidosPage() {
                                             )}
                                         </td>
                                         <td className="p-3 text-center">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => {
-                                                    setSelectedOrder(order)
-                                                    setActiveTab("detalhes")
-                                                    setTimelineFilter('todos')
-                                                }}
-                                            >
+                                            <Button variant="ghost" size="sm" onClick={() => {
+                                                setSelectedOrder(order)
+                                                setActiveTab("detalhes")
+                                                setTimelineFilter('todos')
+                                            }}>
                                                 <Eye className="w-4 h-4" />
                                             </Button>
                                         </td>
                                     </motion.tr>
                                 )
                             })}
-                            {orders.length === 0 && (
+                            {paginatedOrders.length === 0 && (
                                 <tr>
                                     <td colSpan={8} className="p-8 text-center text-muted-foreground">
                                         Nenhum pedido encontrado com os filtros selecionados
@@ -624,45 +630,33 @@ export default function PedidosPage() {
                     </table>
                 </div>
 
-                {/* Paginação */}
-                <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30">
-                    <p className="text-sm text-muted-foreground">
-                        {totalItems > 0 ? (
-                            <>Mostrando {((page - 1) * PAGE_SIZE) + 1} - {Math.min(page * PAGE_SIZE, totalItems)} de {totalItems} pedidos</>
-                        ) : (
-                            'Nenhum pedido encontrado'
-                        )}
-                    </p>
-                    <div className="flex gap-1">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={page <= 1}
-                            onClick={() => setPage(page - 1)}
-                        >
-                            <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={page >= totalPages}
-                            onClick={() => setPage(page + 1)}
-                        >
-                            <ChevronRight className="w-4 h-4" />
-                        </Button>
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30">
+                        <p className="text-sm text-muted-foreground">
+                            {totalItems > 0 ? (
+                                <>Mostrando {((page - 1) * PAGE_SIZE) + 1} - {Math.min(page * PAGE_SIZE, totalItems)} de {totalItems} pedidos</>
+                            ) : (
+                                'Nenhum pedido encontrado'
+                            )}
+                        </p>
+                        <div className="flex gap-1">
+                            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                                <ChevronLeft className="w-4 h-4" />
+                            </Button>
+                            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+                                <ChevronRight className="w-4 h-4" />
+                            </Button>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
 
-            {/* Modal de detalhes - mantido igual, já usa as funções atualizadas */}
+            {/* Modal de detalhes */}
             <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
                 <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle className="text-xl">
-                            Detalhes do Pedido #{selectedOrder?.id_pedido}
-                        </DialogTitle>
+                        <DialogTitle className="text-xl">Detalhes do Pedido #{selectedOrder?.id_Requisicao}</DialogTitle>
                     </DialogHeader>
-
                     {selectedOrder && (
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
                             <TabsList className="grid w-full grid-cols-4">
@@ -674,320 +668,62 @@ export default function PedidosPage() {
 
                             <TabsContent value="detalhes" className="space-y-4 mt-4">
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1">
-                                        <p className="text-xs text-muted-foreground">ID do Pedido</p>
-                                        <p className="text-sm font-medium">{selectedOrder.id_pedido}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-xs text-muted-foreground">Status</p>
-                                        <Badge
-                                            variant="outline"
-                                            className={getStatusColor(selectedOrder.status_pedido || '')}
-                                        >
-                                            {selectedOrder.status_pedido}
-                                        </Badge>
-                                    </div>
+                                    <div><p className="text-xs text-muted-foreground">ID Requisição</p><p className="text-sm font-medium">{selectedOrder.id_Requisicao}</p></div>
+                                    <div><p className="text-xs text-muted-foreground">Status</p><Badge variant="outline" className={getStatusColor(selectedOrder.status_pedido || '')}>{selectedOrder.status_pedido}</Badge></div>
                                 </div>
-
-                                <div className="space-y-1">
-                                    <p className="text-xs text-muted-foreground">Título</p>
-                                    <p className="text-sm">{selectedOrder.titulo}</p>
-                                </div>
-
+                                <div><p className="text-xs text-muted-foreground">Título</p><p className="text-sm">{selectedOrder.titulo}</p></div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1">
-                                        <p className="text-xs text-muted-foreground">Fornecedor</p>
-                                        <p className="text-sm font-medium">{selectedOrder.fornecedor_nome}</p>
-                                        {selectedOrder.fornecedor_documento && (
-                                            <p className="text-xs text-muted-foreground">
-                                                Doc: {selectedOrder.fornecedor_documento}
-                                            </p>
-                                        )}
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-xs text-muted-foreground">Requisitante</p>
-                                        <p className="text-sm">{selectedOrder.requisitante || '---'}</p>
-                                    </div>
+                                    <div><p className="text-xs text-muted-foreground">Fornecedor</p><p className="text-sm font-medium">{selectedOrder.fornecedor_nome}</p></div>
+                                    <div><p className="text-xs text-muted-foreground">Requisitante</p><p className="text-sm">{selectedOrder.requisitante || '---'}</p></div>
                                 </div>
-
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1">
-                                        <p className="text-xs text-muted-foreground">Data do Pedido</p>
-                                        <p className="text-sm">
-                                            {selectedOrder.data_pedido
-                                                ? new Date(selectedOrder.data_pedido).toLocaleDateString("pt-BR")
-                                                : '---'}
-                                        </p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-xs text-muted-foreground">Valor Total</p>
-                                        <p className="text-sm font-bold text-primary">
-                                            {formatCurrency(selectedOrder.valor_total || 0)}
-                                        </p>
-                                    </div>
+                                    <div><p className="text-xs text-muted-foreground">Data</p><p className="text-sm">{selectedOrder.data_pedido ? new Date(selectedOrder.data_pedido).toLocaleDateString("pt-BR") : '---'}</p></div>
+                                    <div><p className="text-xs text-muted-foreground">Valor</p><p className="text-sm font-bold text-primary">{formatCurrency(selectedOrder.valor_total || 0)}</p></div>
                                 </div>
-
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1">
-                                        <p className="text-xs text-muted-foreground">Tipo</p>
-                                        <p className="text-sm">{selectedOrder.tipo_pedido || '---'}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-xs text-muted-foreground">Fonte Pagadora</p>
-                                        <p className="text-sm">{selectedOrder.fonte_pagadora || '---'}</p>
-                                    </div>
+                                    <div><p className="text-xs text-muted-foreground">Tipo</p><p className="text-sm">{selectedOrder.tipo_pedido || '---'}</p></div>
+                                    <div><p className="text-xs text-muted-foreground">Fonte Pagadora</p><p className="text-sm">{selectedOrder.fonte_pagadora || '---'}</p></div>
                                 </div>
-
                                 {selectedOrder.descricao_pedido && (
-                                    <div className="space-y-1">
-                                        <p className="text-xs text-muted-foreground">Descrição</p>
-                                        <p className="text-sm bg-muted/30 p-3 rounded-md">
-                                            {selectedOrder.descricao_pedido}
-                                        </p>
-                                    </div>
-                                )}
-
-                                {selectedOrder.justificativa_compra && (
-                                    <div className="space-y-1">
-                                        <p className="text-xs text-muted-foreground">Justificativa</p>
-                                        <p className="text-sm bg-muted/30 p-3 rounded-md">
-                                            {selectedOrder.justificativa_compra}
-                                        </p>
-                                    </div>
+                                    <div><p className="text-xs text-muted-foreground">Descrição</p><p className="text-sm bg-muted/30 p-3 rounded-md">{selectedOrder.descricao_pedido}</p></div>
                                 )}
                             </TabsContent>
 
                             <TabsContent value="itens" className="space-y-4 mt-4">
                                 {selectedOrder.itens_pedido && selectedOrder.itens_pedido.length > 0 ? (
                                     <div className="space-y-3">
-                                        {selectedOrder.itens_pedido.map((item, index) => (
-                                            <div key={index} className="bg-muted/30 p-3 rounded-lg">
-                                                <div className="flex items-start justify-between">
-                                                    <div>
-                                                        <p className="font-medium">{item.nomeServico}</p>
-                                                        <p className="text-xs text-muted-foreground mt-1">
-                                                            Grupo: {item.grupo}
-                                                        </p>
-                                                        {item.descricao && (
-                                                            <p className="text-xs text-muted-foreground mt-1">
-                                                                {item.descricao}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                    <Badge variant="outline">
-                                                        Qtd: {item.quantidade}
-                                                    </Badge>
-                                                </div>
-                                                <p className="text-xs text-muted-foreground mt-2">
-                                                    Centro de Custo: {item.centroCusto}
-                                                </p>
+                                        {selectedOrder.itens_pedido.map((item, idx) => (
+                                            <div key={idx} className="bg-muted/30 p-3 rounded-lg">
+                                                <p className="font-medium">{item.nomeServico || item.nomeProduto}</p>
+                                                <p className="text-xs text-muted-foreground">Grupo: {item.grupo} | Qtd: {item.quantidade}</p>
+                                                <p className="text-xs text-muted-foreground mt-1">Centro de Custo: {item.centroCusto}</p>
                                             </div>
                                         ))}
                                     </div>
-                                ) : (
-                                    <p className="text-center text-muted-foreground py-4">
-                                        Nenhum item encontrado
-                                    </p>
-                                )}
+                                ) : <p className="text-center py-4">Nenhum item encontrado</p>}
                             </TabsContent>
 
                             <TabsContent value="entrega" className="space-y-4 mt-4">
                                 {selectedOrder.local_entrega ? (
-                                    <div className="space-y-3">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-1">
-                                                <p className="text-xs text-muted-foreground">Responsável</p>
-                                                <p className="text-sm">{selectedOrder.local_entrega.responsavel}</p>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <p className="text-xs text-muted-foreground">CEP</p>
-                                                <p className="text-sm">{selectedOrder.local_entrega.cep}</p>
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-1">
-                                            <p className="text-xs text-muted-foreground">Endereço</p>
-                                            <p className="text-sm">
-                                                {selectedOrder.local_entrega.endereco}, {selectedOrder.local_entrega.numero}
-                                                {selectedOrder.local_entrega.complemento && ` - ${selectedOrder.local_entrega.complemento}`}
-                                            </p>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-1">
-                                                <p className="text-xs text-muted-foreground">Bairro</p>
-                                                <p className="text-sm">{selectedOrder.local_entrega.bairro}</p>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <p className="text-xs text-muted-foreground">Cidade/UF</p>
-                                                <p className="text-sm">
-                                                    {selectedOrder.local_entrega.cidade}/{selectedOrder.local_entrega.estado}
-                                                </p>
-                                            </div>
-                                        </div>
+                                    <div className="space-y-2">
+                                        <p><span className="text-muted-foreground">Responsável:</span> {selectedOrder.local_entrega.responsavel}</p>
+                                        <p><span className="text-muted-foreground">Endereço:</span> {selectedOrder.local_entrega.endereco}, {selectedOrder.local_entrega.numero}</p>
+                                        <p><span className="text-muted-foreground">Cidade:</span> {selectedOrder.local_entrega.cidade}/{selectedOrder.local_entrega.estado} - CEP: {selectedOrder.local_entrega.cep}</p>
                                     </div>
-                                ) : (
-                                    <p className="text-center text-muted-foreground py-4">
-                                        Nenhuma informação de entrega
-                                    </p>
-                                )}
+                                ) : <p className="text-center py-4">Sem informação de entrega</p>}
                             </TabsContent>
 
-                            {/* TIMELINE COM ETAPAS */}
                             <TabsContent value="timeline" className="space-y-4 mt-4">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h4 className="text-sm font-medium text-foreground">Histórico do Pedido</h4>
-                                    <div className="flex items-center gap-2">
-                                        <Button
-                                            variant={timelineFilter === 'todos' ? 'default' : 'outline'}
-                                            size="sm"
-                                            onClick={() => setTimelineFilter('todos')}
-                                            className="h-8"
-                                        >
-                                            <Layers className="w-3 h-3 mr-1" />
-                                            Todos
-                                        </Button>
-                                        <Button
-                                            variant={timelineFilter === 'etapas' ? 'default' : 'outline'}
-                                            size="sm"
-                                            onClick={() => setTimelineFilter('etapas')}
-                                            className="h-8"
-                                        >
-                                            <Flag className="w-3 h-3 mr-1" />
-                                            Por Etapas
-                                        </Button>
+                                {selectedOrder.logs && selectedOrder.logs.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {selectedOrder.logs.map((log, idx) => (
+                                            <div key={idx} className="border-l-2 border-primary/30 pl-4 py-2">
+                                                <p className="text-sm font-medium">{log.acao}</p>
+                                                <p className="text-xs text-muted-foreground">{log.autor} - {new Date(log.data).toLocaleString("pt-BR")}</p>
+                                            </div>
+                                        ))}
                                     </div>
-                                </div>
-
-                                {selectedOrder.logs ? (
-                                    (() => {
-                                        const logsArray = Array.isArray(selectedOrder.logs)
-                                            ? selectedOrder.logs
-                                            : [selectedOrder.logs]
-
-                                        if (logsArray.length === 0) {
-                                            return (
-                                                <div className="text-center py-8">
-                                                    <Clock className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
-                                                    <p className="text-sm text-muted-foreground">
-                                                        Nenhum log encontrado para este pedido
-                                                    </p>
-                                                </div>
-                                            )
-                                        }
-
-                                        if (timelineFilter === 'etapas') {
-                                            // Agrupar logs por etapa
-                                            const grupos = agruparLogsPorEtapa(logsArray)
-
-                                            return (
-                                                <div className="space-y-6">
-                                                    {ETAPAS.sort((a, b) => a.ordem - b.ordem).map((etapaInfo) => {
-                                                        const logsDaEtapa = grupos[etapaInfo.nome] || []
-
-                                                        if (logsDaEtapa.length === 0) return null
-
-                                                        return (
-                                                            <div key={etapaInfo.nome} className="space-y-2">
-                                                                <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border ${getEtapaColor(etapaInfo.nome)}`}>
-                                                                    {etapaInfo.nome === 'CANCELADO' ? (
-                                                                        <XCircle className="w-3 h-3" />
-                                                                    ) : (
-                                                                        <Flag className="w-3 h-3" />
-                                                                    )}
-                                                                    <span className="text-xs font-medium">{etapaInfo.nome}</span>
-                                                                    <Badge variant="outline" className="text-[10px] px-1">
-                                                                        {etapaInfo.descricao}
-                                                                    </Badge>
-                                                                </div>
-
-                                                                <div className="space-y-2 pl-4">
-                                                                    {logsDaEtapa.map((log, index) => (
-                                                                        <div key={index} className="bg-muted/30 rounded-lg p-3 ml-4 border-l-2 border-primary/30">
-                                                                            <div className="flex items-start justify-between">
-                                                                                <p className="text-sm font-medium">{log.acao}</p>
-                                                                                <Badge variant="outline" className="text-[10px]">
-                                                                                    {new Date(log.data).toLocaleDateString("pt-BR")}
-                                                                                </Badge>
-                                                                            </div>
-                                                                            <p className="text-xs text-muted-foreground mt-1">
-                                                                                {log.autor}
-                                                                            </p>
-                                                                            {log.comentarios && (
-                                                                                <p className="text-xs text-muted-foreground mt-1 italic">
-                                                                                    "{log.comentarios}"
-                                                                                </p>
-                                                                            )}
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )
-                                                    })}
-                                                </div>
-                                            )
-                                        } else {
-                                            // Visualização normal (todos os logs em ordem cronológica)
-                                            return (
-                                                <div className="relative">
-                                                    <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
-
-                                                    <div className="space-y-4">
-                                                        {logsArray.map((log: any, index: number) => (
-                                                            <motion.div
-                                                                key={index}
-                                                                initial={{ opacity: 0, x: -20 }}
-                                                                animate={{ opacity: 1, x: 0 }}
-                                                                transition={{ delay: index * 0.05 }}
-                                                                className="relative flex gap-4 pl-10"
-                                                            >
-                                                                <div className="absolute left-0 w-8 h-8 rounded-full bg-card border-2 border-border flex items-center justify-center">
-                                                                    {getLogIcon(log.acao || '')}
-                                                                </div>
-
-                                                                <div className="flex-1 bg-muted/30 rounded-lg p-3">
-                                                                    <div className="flex items-center justify-between mb-2">
-                                                                        <p className="text-sm font-medium text-card-foreground">
-                                                                            {log.acao || 'Ação desconhecida'}
-                                                                        </p>
-                                                                        <Badge variant="outline" className="text-[10px]">
-                                                                            <Calendar className="w-3 h-3 mr-1" />
-                                                                            {log.data ? new Date(log.data).toLocaleDateString("pt-BR") : '---'}
-                                                                        </Badge>
-                                                                    </div>
-
-                                                                    <div className="flex items-center text-xs text-muted-foreground">
-                                                                        <User className="w-3 h-3 mr-1" />
-                                                                        {log.autor || 'Autor não informado'}
-                                                                    </div>
-
-                                                                    {log.comentarios && (
-                                                                        <p className="text-xs text-muted-foreground mt-2 italic">
-                                                                            "{log.comentarios}"
-                                                                        </p>
-                                                                    )}
-
-                                                                    {log.data && (
-                                                                        <p className="text-[10px] text-muted-foreground mt-2">
-                                                                            {new Date(log.data).toLocaleTimeString("pt-BR")}
-                                                                        </p>
-                                                                    )}
-                                                                </div>
-                                                            </motion.div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )
-                                        }
-                                    })()
-                                ) : (
-                                    <div className="text-center py-8">
-                                        <Clock className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
-                                        <p className="text-sm text-muted-foreground">
-                                            Nenhum log encontrado para este pedido
-                                        </p>
-                                    </div>
-                                )}
+                                ) : <p className="text-center py-4">Nenhum log encontrado</p>}
                             </TabsContent>
                         </Tabs>
                     )}

@@ -17,8 +17,8 @@ export async function GET(request: NextRequest) {
             const pedidos = result.data || [];
 
             const pedidosAdaptados = pedidos.map((p: any) => ({
-                id: p.idPedido,
-                id_pedido: p.idPedido,
+                id: p.idRequisicao,
+                id_Requisicao: p.idRequisicao,
                 titulo: p.titulo,
                 status_pedido: p.statusPedido,
                 fornecedor_nome: p.fornecedor?.nome,
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
             const searchLower = search.toLowerCase();
             pedidos = pedidos.filter((p: any) =>
                 p.titulo?.toLowerCase().includes(searchLower) ||
-                p.idPedido?.toLowerCase().includes(searchLower) ||
+                p.idRequisicao?.toLowerCase().includes(searchLower) ||
                 p.fornecedor?.nome?.toLowerCase().includes(searchLower)
             );
         }
@@ -76,8 +76,8 @@ export async function GET(request: NextRequest) {
         }
 
         const pedidosAdaptados = pedidos.map((p: any) => ({
-            id: p.idPedido,
-            id_pedido: p.idPedido,
+            id: p.idRequisicao,
+            id_Requisicao: p.idRequisicao,
             titulo: p.titulo,
             status_pedido: p.statusPedido,
             fornecedor_nome: p.fornecedor?.nome,

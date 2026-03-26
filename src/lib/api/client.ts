@@ -1,11 +1,9 @@
-// src/lib/api/client.ts
 import { ApiParams, ApiResponse } from './types'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL!
 const API_USERNAME = process.env.API_USERNAME!
 const API_PASSWORD = process.env.API_PASSWORD!
 
-// Validações em runtime
 if (!API_BASE_URL) {
     throw new Error('❌ NEXT_PUBLIC_API_URL não configurada no .env.local')
 }
@@ -40,7 +38,6 @@ function buildUrl(endpoint: string, params: ApiParams): string {
         }
     })
 
-    // API_BASE_URL é string graças à validação
     const baseUrl = API_BASE_URL.replace(/\/$/, '')
     const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
     const queryString = searchParams.toString()
@@ -85,7 +82,6 @@ export async function apiGet<T>(endpoint: string, params: ApiParams = {}): Promi
 
         const data = await response.json()
 
-        // CORREÇÃO AQUI: 100 itens por página, NÃO 10!
         const ITEMS_PER_PAGE = 100
 
         return {

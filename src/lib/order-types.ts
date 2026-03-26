@@ -35,7 +35,7 @@ export interface LogPedido {
 
 export interface Order {
     id: number
-    id_pedido: string
+    id_Requisicao: string
     id_requisicao?: string
     titulo?: string
     status_pedido?: string
@@ -288,24 +288,24 @@ export function calcularTempoEtapa(logs: LogPedido[], etapaNome: string, pedidoI
 }
 
 // Função para calcular a média de tempo de uma etapa considerando todos os pedidos
-export function calcularMediaTempoEtapa(pedidos: Order[], etapaNome: string): string {
+export function calcularMediaTempoEtapa(requisicao: Order[], etapaNome: string): string {
     // ETAPAS 05 e CANCELADO não têm média
     if (etapaNome === 'ETAPA 05' || etapaNome === 'CANCELADO') {
         return '-'
     }
 
     const tempos: number[] = []
-    console.log(`\n🔍 Calculando média para ${etapaNome} com ${pedidos.length} pedidos`)
+    console.log(`\n🔍 Calculando média para ${etapaNome} com ${requisicao.length} requisição`)
     console.log(`📝 Palavras-chave para ${etapaNome}:`, ETAPAS.find(e => e.nome === etapaNome)?.palavrasChave)
 
-    pedidos.forEach((pedido, index) => {
-        if (!pedido.logs) return
+    requisicao.forEach((requisicao, index) => {
+        if (!requisicao.logs) return
 
-        const logsArray = Array.isArray(pedido.logs) ? pedido.logs : [pedido.logs]
+        const logsArray = Array.isArray(requisicao.logs) ? requisicao.logs : [requisicao.logs]
 
-        // Mostrar logs para os primeiros 5 pedidos para debug
+        // Mostrar logs para os primeiros 5 requisições para debug
         const mostrarLog = index < 5
-        const tempo = calcularTempoEtapa(logsArray, etapaNome, mostrarLog ? pedido.id_pedido : undefined)
+        const tempo = calcularTempoEtapa(logsArray, etapaNome, mostrarLog ? requisicao.id_Requisicao : undefined)
 
         if (tempo !== null) {
             tempos.push(tempo)

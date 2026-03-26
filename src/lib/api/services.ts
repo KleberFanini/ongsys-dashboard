@@ -1,4 +1,3 @@
-// src/lib/api/services.ts
 import { apiGet } from './client'
 import { ApiParams } from './types'
 import { getCached, setCached } from './cache'
@@ -9,7 +8,6 @@ export interface DateFilter {
     costCenter?: string
 }
 
-// Função auxiliar para obter datas padrão (mês atual)
 function getDefaultDates() {
     const hoje = new Date()
     const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
@@ -20,9 +18,6 @@ function getDefaultDates() {
     }
 }
 
-// ==============================================
-// PEDIDOS (sem limite de páginas)
-// ==============================================
 export const pedidosService = {
     async listar(filters: DateFilter = {}, page = 1) {
         const params: ApiParams = { pageNumber: page }
@@ -81,9 +76,7 @@ export const pedidosService = {
         }
     }
 }
-// ==============================================
-// CONTAS A PAGAR (com datas obrigatórias)
-// ==============================================
+
 export const contasPagarService = {
     async listar(filters: DateFilter = {}, page = 1) {
         const params: ApiParams = {
@@ -148,9 +141,6 @@ export const contasPagarService = {
     }
 }
 
-// ==============================================
-// CONTAS A RECEBER (com datas obrigatórias)
-// ==============================================
 export const contasReceberService = {
     async listar(filters: DateFilter = {}, page = 1) {
         const params: ApiParams = {
@@ -215,9 +205,6 @@ export const contasReceberService = {
     }
 }
 
-// ==============================================
-// FORNECEDORES (com datas obrigatórias)
-// ==============================================
 export const fornecedoresService = {
     async listar(filters: DateFilter = {}, page = 1) {
         const params: ApiParams = { pageNumber: page }
@@ -279,9 +266,6 @@ export const fornecedoresService = {
     }
 }
 
-// ==============================================
-// PRODUTOS (SEM datas obrigatórias - retorna todos)
-// ==============================================
 export const produtosService = {
     async listar(filters: DateFilter = {}, page = 1) {
         const params: ApiParams = { pageNumber: page }
