@@ -1,39 +1,46 @@
 // src/middleware.ts
-import { withAuth } from 'next-auth/middleware';
-import { NextResponse } from 'next/server';
+import { withAuth } from 'next-auth/middleware'
+import { NextResponse } from 'next/server'
 
 export default withAuth(
     function middleware(req) {
-        const token = req.nextauth.token;
-        const path = req.nextUrl.pathname;
+        const token = req.nextauth.token
+        const path = req.nextUrl.pathname
 
-        // Rotas que exigem papel de admin
-        if (path.startsWith('/admin') && token?.papel !== 'admin') {
-            return NextResponse.redirect(new URL('/dashboard', req.url));
+        // Rotas protegidas por nível de acesso
+        const rolePermissions: Record<string, string[]> = {
+            SUPER_ADMIN: ['/dashboard', '/admin', '/usuarios', '/relatorios'],
+            OPERADOR_SEDE: ['/dashboard', '/relatorios'],
+            CONSULTOR: ['/dashboard']
         }
 
-        // Rotas que exigem papel de gestor ou admin
-        if (path.startsWith('/gestor') && token?.papel !== 'gestor' && token?.papel !== 'admin') {
-            return NextResponse.redirect(new URL('/dashboard', req.url));
+        const allowedPaths = rolePermissions[token?.role as string] || []
+        const isAllowed = allowedPaths.some(p => path.startsWith(p))
+
+        if (!isAllowed) {
+            return NextResponse.redirect(new URL('/dashboard', req.url))
         }
 
-        return NextResponse.next();
+        return NextResponse.next()
     },
     {
         callbacks: {
-            authorized: () => true,
+            authorized: ({ token }) => !!token
         },
         pages: {
             signIn: '/login'
         }
     }
-);
+)
 
 export const config = {
     matcher: [
         '/dashboard/:path*',
         '/admin/:path*',
-        '/gestor/:path*',
-        '/api/dashboard/:path*'
+        '/usuarios/:path*',
+        '/relatorios/:path*',
+        '/pedidos/:path*',
+        '/fornecedores/:path*',
+        '/produtos/:path*'
     ]
-};
+}
