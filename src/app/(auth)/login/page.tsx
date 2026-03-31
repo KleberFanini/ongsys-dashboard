@@ -1,7 +1,7 @@
 // src/app/login/page.tsx
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
@@ -14,7 +14,27 @@ export default function LoginPage() {
     const [senha, setSenha] = useState('')
     const [erro, setErro] = useState('')
     const [carregando, setCarregando] = useState(false)
+    const [isDark, setIsDark] = useState(false)
     const router = useRouter()
+
+    // Detectar o tema atual
+    useEffect(() => {
+        const checkTheme = () => {
+            const isDarkMode = document.documentElement.classList.contains('dark')
+            setIsDark(isDarkMode)
+        }
+
+        checkTheme()
+
+        // Observer para mudanças de tema
+        const observer = new MutationObserver(checkTheme)
+        observer.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['class']
+        })
+
+        return () => observer.disconnect()
+    }, [])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -42,11 +62,11 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
+        <div className="min-h-screen flex items-center justify-center bg-background">
             <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-card rounded-xl shadow-lg p-8 w-full max-w-md border"
+                className="bg-card rounded-xl shadow-lg p-8 w-full max-w-md border border-border"
             >
                 <div className="text-center mb-8">
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
@@ -58,14 +78,14 @@ export default function LoginPage() {
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium mb-2">Email</label>
+                        <label className="block text-sm font-medium text-foreground mb-2">Email</label>
                         <div className="relative">
                             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <Input
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="pl-10"
+                                className="pl-10 bg-background border-border text-foreground"
                                 placeholder="seu@email.com"
                                 required
                             />
@@ -73,14 +93,14 @@ export default function LoginPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium mb-2">Senha</label>
+                        <label className="block text-sm font-medium text-foreground mb-2">Senha</label>
                         <div className="relative">
                             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <Input
                                 type="password"
                                 value={senha}
                                 onChange={(e) => setSenha(e.target.value)}
-                                className="pl-10"
+                                className="pl-10 bg-background border-border text-foreground"
                                 placeholder="••••••••"
                                 required
                             />

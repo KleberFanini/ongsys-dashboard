@@ -9,7 +9,6 @@ async function main() {
 
     const senhaHash = await bcrypt.hash('admin123', 10)
 
-    // SUPER_ADMIN
     const admin = await prisma.usuario.upsert({
         where: { email: 'admin@ongsys.com.br' },
         update: {},
@@ -23,7 +22,6 @@ async function main() {
     })
     console.log('✅ SUPER_ADMIN:', admin.email)
 
-    // OPERADOR_SEDE
     const operador = await prisma.usuario.upsert({
         where: { email: 'operador@ongsys.com.br' },
         update: {},
@@ -37,7 +35,6 @@ async function main() {
     })
     console.log('✅ OPERADOR_SEDE:', operador.email)
 
-    // CONSULTOR
     const consultor = await prisma.usuario.upsert({
         where: { email: 'consultor@ongsys.com.br' },
         update: {},

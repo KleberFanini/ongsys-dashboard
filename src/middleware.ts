@@ -7,17 +7,13 @@ export default withAuth(
         const token = req.nextauth.token
         const path = req.nextUrl.pathname
 
-        // Rotas protegidas por nível de acesso
-        const rolePermissions: Record<string, string[]> = {
-            SUPER_ADMIN: ['/dashboard', '/admin', '/usuarios', '/relatorios'],
-            OPERADOR_SEDE: ['/dashboard', '/relatorios'],
-            CONSULTOR: ['/dashboard']
+        // Rotas protegidas do dashboard
+        if (path.startsWith('/dashboard') && !token) {
+            return NextResponse.redirect(new URL('/login', req.url))
         }
 
-        const allowedPaths = rolePermissions[token?.role as string] || []
-        const isAllowed = allowedPaths.some(p => path.startsWith(p))
-
-        if (!isAllowed) {
+        // Redirecionar login se já estiver autenticado
+        if (path === '/login' && token) {
             return NextResponse.redirect(new URL('/dashboard', req.url))
         }
 
@@ -25,10 +21,7 @@ export default withAuth(
     },
     {
         callbacks: {
-            authorized: ({ token }) => !!token
-        },
-        pages: {
-            signIn: '/login'
+            authorized: ({ token }) => true
         }
     }
 )
@@ -36,11 +29,9 @@ export default withAuth(
 export const config = {
     matcher: [
         '/dashboard/:path*',
-        '/admin/:path*',
-        '/usuarios/:path*',
-        '/relatorios/:path*',
         '/pedidos/:path*',
         '/fornecedores/:path*',
-        '/produtos/:path*'
+        '/produtos/:path*',
+        '/login'
     ]
 }

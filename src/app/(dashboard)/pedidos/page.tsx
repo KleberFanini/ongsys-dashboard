@@ -1,4 +1,4 @@
-// src/app/pedidos/page.tsx - Versão corrigida com tratamento de undefined
+// src/app/(dashboard)/pedidos/page.tsx
 'use client'
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
@@ -42,6 +42,7 @@ import {
 } from "@/src/components/ui/dropdown-menu"
 import { formatCurrency } from "@/src/lib/utils"
 import { ETAPAS, agruparLogsPorEtapa, identificarEtapaAtual, type EtapaEstatistica } from "@/src/lib/order-types"
+import { useAuth } from "@/src/hooks/useAuth"
 
 const PAGE_SIZE = 20
 const BATCH_SIZE = 3
@@ -50,7 +51,7 @@ const CACHE_DURATION = 10 * 60 * 1000
 
 interface Order {
     id: number
-    id_Requisicao: string
+    id_pedido: string
     titulo: string
     status_pedido: string
     fornecedor_nome: string
@@ -114,6 +115,7 @@ const getLogIcon = (acao: string) => {
 }
 
 export default function PedidosPage() {
+    const { isLoading: authLoading, isAuthenticated } = useAuth()
     const [allOrders, setAllOrders] = useState<Order[]>([])
     const [filteredOrders, setFilteredOrders] = useState<Order[]>([])
     const [loading, setLoading] = useState(true)
@@ -130,7 +132,9 @@ export default function PedidosPage() {
     const [activeTab, setActiveTab] = useState("detalhes")
     const [timelineFilter, setTimelineFilter] = useState<'todos' | 'etapas'>('todos')
     const abortControllerRef = useRef<AbortController | null>(null)
+    const [hasLoaded, setHasLoaded] = useState(false)
 
+    // Calcular estatísticas de etapas baseado nos pedidos carregados
     const etapasEstatisticas = useMemo(() => {
         if (allOrders.length === 0) return []
 
@@ -154,6 +158,7 @@ export default function PedidosPage() {
         return estatisticas
     }, [allOrders])
 
+    // Extrair status e tipos únicos
     const uniqueStatus = useMemo(() => {
         const statusSet = new Set<string>()
         allOrders.forEach(order => {
@@ -170,6 +175,7 @@ export default function PedidosPage() {
         return ['todos', ...Array.from(tipoSet)]
     }, [allOrders])
 
+    // Aplicar filtros localmente
     useEffect(() => {
         if (allOrders.length === 0) return
 
@@ -179,7 +185,7 @@ export default function PedidosPage() {
             const searchLower = search.toLowerCase()
             filtered = filtered.filter(order =>
                 order.titulo?.toLowerCase().includes(searchLower) ||
-                order.id_Requisicao?.toLowerCase().includes(searchLower) ||
+                order.id_pedido?.toLowerCase().includes(searchLower) ||
                 order.fornecedor_nome?.toLowerCase().includes(searchLower)
             )
         }
@@ -205,7 +211,9 @@ export default function PedidosPage() {
         setPage(1)
     }, [allOrders, search, status, tipo, etapa])
 
+    // Carregar todas as páginas em lotes
     const loadAllPages = useCallback(async () => {
+        // Verificar cache primeiro
         try {
             const cached = localStorage.getItem(CACHE_KEY)
             if (cached) {
@@ -216,6 +224,7 @@ export default function PedidosPage() {
                     setTotalItems(data.totalItems)
                     setTotalPages(data.totalPages)
                     setLoading(false)
+                    setHasLoaded(true)
                     return
                 }
             }
@@ -231,9 +240,15 @@ export default function PedidosPage() {
         abortControllerRef.current = controller
 
         setLoading(true)
+        setHasLoaded(false)
 
         try {
             const primeiraRes = await fetch('/api/pedidos?page=1', { signal: controller.signal })
+
+            if (!primeiraRes.ok) {
+                throw new Error(`HTTP ${primeiraRes.status}`)
+            }
+
             const primeiraData = await primeiraRes.json()
             const totalPedidos = primeiraData.total || 0
             const totalPaginas = Math.ceil(totalPedidos / 100)
@@ -273,7 +288,7 @@ export default function PedidosPage() {
                     results.forEach((result, idx) => {
                         if (result.error) {
                             console.warn(`⚠️ Erro na página ${batch[idx]}:`, result.error)
-                        } else {
+                        } else if (result.data) {
                             const pedidos = (result.data || []).map((order: any) => ({
                                 ...order,
                                 valor_total: order.itens_pedido?.reduce((acc: number, item: any) => {
@@ -314,22 +329,31 @@ export default function PedidosPage() {
         } catch (error: any) {
             if (error.name !== 'AbortError') {
                 console.error('Erro ao carregar pedidos:', error)
+                setAllOrders([])
+                setTotalItems(0)
+                setTotalPages(1)
             }
         } finally {
             setLoading(false)
+            setHasLoaded(true)
             setLoadingProgress({ current: 0, total: 0 })
         }
     }, [])
 
+    // Carregar dados apenas quando autenticado e não carregou ainda
     useEffect(() => {
-        loadAllPages()
+        if (isAuthenticated && !hasLoaded) {
+            console.log('🚀 Iniciando carregamento dos pedidos...')
+            loadAllPages()
+        }
         return () => {
             if (abortControllerRef.current) {
                 abortControllerRef.current.abort()
             }
         }
-    }, [loadAllPages])
+    }, [isAuthenticated, hasLoaded, loadAllPages])
 
+    // Paginação local
     const paginatedOrders = filteredOrders.slice(
         (page - 1) * PAGE_SIZE,
         page * PAGE_SIZE
@@ -349,7 +373,21 @@ export default function PedidosPage() {
         }
     }
 
-    if (loading && allOrders.length === 0) {
+    // Mostrar loading da autenticação
+    if (authLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+        )
+    }
+
+    if (!isAuthenticated) {
+        return null
+    }
+
+    // Mostrar loading com progresso enquanto carrega todas as páginas
+    if (loading || allOrders.length === 0) {
         return (
             <div className="space-y-4 p-6">
                 <Skeleton className="h-8 w-48" />
@@ -361,7 +399,7 @@ export default function PedidosPage() {
                 </div>
                 <div className="bg-card rounded-xl border border-border p-8 text-center">
                     <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
-                    <p className="text-muted-foreground">Carregando pedidos...</p>
+                    <p className="text-muted-foreground">Carregando todos os pedidos...</p>
                     {loadingProgress.total > 0 && (
                         <div className="mt-4">
                             <div className="w-full bg-muted rounded-full h-2">
@@ -371,7 +409,7 @@ export default function PedidosPage() {
                                 />
                             </div>
                             <p className="text-xs text-muted-foreground mt-2">
-                                Página {loadingProgress.current} de {loadingProgress.total}
+                                Carregando página {loadingProgress.current} de {loadingProgress.total}
                             </p>
                         </div>
                     )}
@@ -383,6 +421,7 @@ export default function PedidosPage() {
         )
     }
 
+    // Dados carregados, mostrar tabela completa
     return (
         <div className="space-y-5 animate-fade-in p-6">
             <div className="flex items-center justify-between">
@@ -425,6 +464,7 @@ export default function PedidosPage() {
                 </DropdownMenu>
             </div>
 
+            {/* Filtros */}
             <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
                 <div className="relative flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -486,6 +526,7 @@ export default function PedidosPage() {
                 </Select>
             </div>
 
+            {/* Cards de Estatísticas de Etapas */}
             {etapasEstatisticas.length > 0 && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                     {etapasEstatisticas
@@ -528,6 +569,7 @@ export default function PedidosPage() {
                 </div>
             )}
 
+            {/* Indicadores de filtros ativos */}
             {(search || status !== 'todos' || tipo !== 'todos' || etapa !== 'Todas') && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                     <span>Filtros ativos:</span>
@@ -558,12 +600,13 @@ export default function PedidosPage() {
                 </div>
             )}
 
+            {/* Tabela de pedidos */}
             <div className="bg-card rounded-xl border border-border overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-border bg-muted/50">
-                                <th className="text-left p-3 text-muted-foreground font-medium">ID Requisição</th>
+                                <th className="text-left p-3 text-muted-foreground font-medium">ID</th>
                                 <th className="text-left p-3 text-muted-foreground font-medium">Título</th>
                                 <th className="text-left p-3 text-muted-foreground font-medium hidden md:table-cell">Fornecedor</th>
                                 <th className="text-left p-3 text-muted-foreground font-medium hidden lg:table-cell">Data</th>
@@ -571,6 +614,7 @@ export default function PedidosPage() {
                                 <th className="text-center p-3 text-muted-foreground font-medium">Status</th>
                                 <th className="text-center p-3 text-muted-foreground font-medium hidden lg:table-cell">Etapa Atual</th>
                                 <th className="text-center p-3 text-muted-foreground font-medium">Ações</th>
+                                \)
                             </tr>
                         </thead>
                         <tbody>
@@ -578,13 +622,13 @@ export default function PedidosPage() {
                                 const etapaAtual = identificarEtapaAtual(order.logs || [])
                                 return (
                                     <motion.tr
-                                        key={order.id || order.id_Requisicao}
+                                        key={order.id || order.id_pedido}
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: index * 0.03 }}
                                         className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                                     >
-                                        <td className="p-3 font-mono text-xs text-card-foreground">{order.id_Requisicao}</td>
+                                        <td className="p-3 font-mono text-xs text-card-foreground">{order.id_pedido}</td>
                                         <td className="p-3 text-card-foreground font-medium max-w-[200px] truncate">{order.titulo}</td>
                                         <td className="p-3 hidden md:table-cell text-card-foreground">{order.fornecedor_nome || '---'}</td>
                                         <td className="p-3 hidden lg:table-cell text-muted-foreground">
@@ -608,11 +652,15 @@ export default function PedidosPage() {
                                             )}
                                         </td>
                                         <td className="p-3 text-center">
-                                            <Button variant="ghost" size="sm" onClick={() => {
-                                                setSelectedOrder(order)
-                                                setActiveTab("detalhes")
-                                                setTimelineFilter('todos')
-                                            }}>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => {
+                                                    setSelectedOrder(order)
+                                                    setActiveTab("detalhes")
+                                                    setTimelineFilter('todos')
+                                                }}
+                                            >
                                                 <Eye className="w-4 h-4" />
                                             </Button>
                                         </td>
@@ -630,6 +678,7 @@ export default function PedidosPage() {
                     </table>
                 </div>
 
+                {/* Paginação */}
                 {totalPages > 1 && (
                     <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30">
                         <p className="text-sm text-muted-foreground">
@@ -640,10 +689,20 @@ export default function PedidosPage() {
                             )}
                         </p>
                         <div className="flex gap-1">
-                            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={page <= 1}
+                                onClick={() => setPage(page - 1)}
+                            >
                                 <ChevronLeft className="w-4 h-4" />
                             </Button>
-                            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={page >= totalPages}
+                                onClick={() => setPage(page + 1)}
+                            >
                                 <ChevronRight className="w-4 h-4" />
                             </Button>
                         </div>
@@ -655,7 +714,9 @@ export default function PedidosPage() {
             <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
                 <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle className="text-xl">Detalhes do Pedido #{selectedOrder?.id_Requisicao}</DialogTitle>
+                        <DialogTitle className="text-xl">
+                            Detalhes do Pedido #{selectedOrder?.id_pedido}
+                        </DialogTitle>
                     </DialogHeader>
                     {selectedOrder && (
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
@@ -668,7 +729,7 @@ export default function PedidosPage() {
 
                             <TabsContent value="detalhes" className="space-y-4 mt-4">
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><p className="text-xs text-muted-foreground">ID Requisição</p><p className="text-sm font-medium">{selectedOrder.id_Requisicao}</p></div>
+                                    <div><p className="text-xs text-muted-foreground">ID</p><p className="text-sm font-medium">{selectedOrder.id_pedido}</p></div>
                                     <div><p className="text-xs text-muted-foreground">Status</p><Badge variant="outline" className={getStatusColor(selectedOrder.status_pedido || '')}>{selectedOrder.status_pedido}</Badge></div>
                                 </div>
                                 <div><p className="text-xs text-muted-foreground">Título</p><p className="text-sm">{selectedOrder.titulo}</p></div>
@@ -714,6 +775,19 @@ export default function PedidosPage() {
                             </TabsContent>
 
                             <TabsContent value="timeline" className="space-y-4 mt-4">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h4 className="text-sm font-medium text-foreground">Histórico do Pedido</h4>
+                                    <div className="flex items-center gap-2">
+                                        <Button variant={timelineFilter === 'todos' ? 'default' : 'outline'} size="sm" onClick={() => setTimelineFilter('todos')} className="h-8">
+                                            <Layers className="w-3 h-3 mr-1" />
+                                            Todos
+                                        </Button>
+                                        <Button variant={timelineFilter === 'etapas' ? 'default' : 'outline'} size="sm" onClick={() => setTimelineFilter('etapas')} className="h-8">
+                                            <Flag className="w-3 h-3 mr-1" />
+                                            Por Etapas
+                                        </Button>
+                                    </div>
+                                </div>
                                 {selectedOrder.logs && selectedOrder.logs.length > 0 ? (
                                     <div className="space-y-3">
                                         {selectedOrder.logs.map((log, idx) => (

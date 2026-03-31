@@ -1,4 +1,4 @@
-// src/app/dashboard/page.tsx
+// src/app/(dashboard)/dashboard/page.tsx
 'use client'
 
 import { useState, useEffect } from "react"
@@ -7,12 +7,9 @@ import {
     Package,
     DollarSign,
     Briefcase,
-    TrendingUp,
     Calendar,
     Filter,
     X,
-    Award,
-    ChevronRight,
     Building2
 } from "lucide-react"
 import {
@@ -25,7 +22,8 @@ import { Badge } from "@/src/components/ui/badge"
 import { Button } from "@/src/components/ui/button"
 import { Input } from "@/src/components/ui/input"
 import { DashboardSummary, CostCenter } from "@/src/lib/dashboard-types"
-import { costCentersList, getCostCenterName } from '@/src/lib/cost-centers-map'
+import { getCostCenterName } from '@/src/lib/cost-centers-map'
+import { useAuth } from '@/src/hooks/useAuth'
 
 const formatCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v)
@@ -34,6 +32,7 @@ const formatNumber = (v: number) =>
     new Intl.NumberFormat("pt-BR").format(v)
 
 export default function DashboardPage() {
+    const { isLoading: authLoading, isAuthenticated } = useAuth()
     const [data, setData] = useState<DashboardSummary | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -45,12 +44,6 @@ export default function DashboardPage() {
     const [selectedCostCenter, setSelectedCostCenter] = useState('todos')
     const [availableCostCenters, setAvailableCostCenters] = useState<CostCenter[]>([])
     const [showDateFilter, setShowDateFilter] = useState(false)
-
-    // 🔥 NOVOS ESTADOS PARA FILTRO APLICADO
-    const [appliedStartDate, setAppliedStartDate] = useState('')
-    const [appliedEndDate, setAppliedEndDate] = useState('')
-    const [appliedCostCenter, setAppliedCostCenter] = useState('todos')
-    const [hasActiveFilters, setHasActiveFilters] = useState(false)
 
     const getUnitColor = (unit: string): string => {
         const colors: Record<string, string> = {
@@ -79,44 +72,25 @@ export default function DashboardPage() {
         return () => observer.disconnect()
     }, [])
 
-    // Função para buscar dados com os filtros APLICADOS
+    // Função para buscar dados com filtros
     const fetchData = async () => {
+        if (!isAuthenticated) return
+
         setLoading(true)
         try {
             const params = new URLSearchParams()
-            if (appliedStartDate) params.append('startDate', appliedStartDate)
-            if (appliedEndDate) params.append('endDate', appliedEndDate)
-            if (appliedCostCenter && appliedCostCenter !== 'todos') {
-                params.append('costCenter', appliedCostCenter)
+            if (startDate) params.append('startDate', startDate)
+            if (endDate) params.append('endDate', endDate)
+            if (selectedCostCenter && selectedCostCenter !== 'todos') {
+                params.append('costCenter', selectedCostCenter)
             }
-
-            console.log('🔍 Buscando dados com filtros aplicados:', {
-                startDate: appliedStartDate,
-                endDate: appliedEndDate,
-                costCenter: appliedCostCenter,
-                url: `/api/dashboard?${params.toString()}`
-            })
 
             const response = await fetch(`/api/dashboard?${params.toString()}`)
             if (!response.ok) throw new Error('Erro ao carregar dados')
             const json = await response.json()
 
-            console.log('✅ Dados recebidos:', {
-                totalProductOrders: json.totalProductOrders,
-                totalServiceOrders: json.totalServiceOrders,
-                totalPayable: json.totalPayable,
-                totalReceivable: json.totalReceivable,
-                topSuppliersCount: json.topSuppliers?.length,
-                topItemsCount: json.topItems?.length
-            })
-
             setData(json)
             setAvailableCostCenters(json.availableCostCenters || [])
-
-            // Verificar se há filtros ativos
-            const hasFilters = !!(appliedStartDate || appliedEndDate || appliedCostCenter !== 'todos')
-            setHasActiveFilters(hasFilters)
-
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Erro desconhecido')
         } finally {
@@ -124,35 +98,38 @@ export default function DashboardPage() {
         }
     }
 
-    // 🔥 APLICAR FILTRO - só chama quando clica no botão
+    // Buscar dados quando os filtros mudarem e autenticação estiver pronta
+    useEffect(() => {
+        if (isAuthenticated) {
+            fetchData()
+        }
+    }, [startDate, endDate, selectedCostCenter, isAuthenticated])
+
+    // Aplicar filtro de data
     const handleApplyFilter = () => {
         if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
             alert('Data inicial não pode ser maior que data final')
             return
         }
-
-        // Aplicar os filtros
-        setAppliedStartDate(startDate)
-        setAppliedEndDate(endDate)
-        setAppliedCostCenter(selectedCostCenter)
         setShowDateFilter(false)
     }
 
-    // 🔥 LIMPAR FILTRO
+    // Limpar filtro de data
     const handleClearFilter = () => {
         setStartDate('')
         setEndDate('')
         setSelectedCostCenter('todos')
-        setAppliedStartDate('')
-        setAppliedEndDate('')
-        setAppliedCostCenter('todos')
         setShowDateFilter(false)
     }
 
-    // Buscar dados quando os filtros APLICADOS mudarem
-    useEffect(() => {
-        fetchData()
-    }, [appliedStartDate, appliedEndDate, appliedCostCenter])
+    // Mostrar loading da autenticação
+    if (authLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+        )
+    }
 
     if (error) {
         return (
@@ -180,7 +157,7 @@ export default function DashboardPage() {
                     <Skeleton className="h-4 w-72" />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {[...Array(6)].map((_, i) => (
+                    {[...Array(4)].map((_, i) => (
                         <Skeleton key={i} className="h-28 rounded-xl" />
                     ))}
                 </div>
@@ -213,14 +190,14 @@ export default function DashboardPage() {
                         className="flex items-center gap-2"
                     >
                         <Calendar className="w-4 h-4 text-foreground" />
-                        {hasActiveFilters ? (
+                        {startDate && endDate ? (
                             <span>Filtro ativo</span>
                         ) : (
                             <span>Filtrar</span>
                         )}
                     </Button>
 
-                    {hasActiveFilters && (
+                    {(startDate || endDate || selectedCostCenter !== 'todos') && (
                         <Button
                             variant="ghost"
                             size="sm"
@@ -288,59 +265,40 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* Indicador de filtros ativos */}
-            {hasActiveFilters && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground bg-primary/5 p-2 rounded-lg flex-wrap">
-                    <Filter className="w-4 h-4" />
-                    <span>Filtros ativos:</span>
-                    {appliedStartDate && appliedEndDate && (
-                        <span className="bg-primary/10 px-2 py-1 rounded">
-                            {new Date(appliedStartDate).toLocaleDateString('pt-BR')} até {new Date(appliedEndDate).toLocaleDateString('pt-BR')}
-                        </span>
-                    )}
-                    {appliedCostCenter !== 'todos' && (
-                        <span className="bg-primary/10 px-2 py-1 rounded">
-                            Centro: {getCostCenterName(appliedCostCenter)}
-                        </span>
-                    )}
-                </div>
-            )}
-
             {/* Cards de estatísticas */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
-                    title="Total de Produtos"
+                    title="Total de Produtos por Pedido"
                     value={formatNumber(data.totalProductOrders)}
-                    subtitle="Pedidos de produto"
+                    subtitle="Quantidade de pedidos de produto"
                     icon={Package}
                     variant="info"
                 />
                 <StatCard
-                    title="Valor dos Produtos"
+                    title="Valor Total dos Produtos por Pedido"
                     value={formatCurrency(data.totalProductOrdersValue)}
-                    subtitle="Soma dos pedidos de produto"
+                    subtitle="Soma dos valores de pedidos de produto"
                     icon={DollarSign}
                     variant="success"
                 />
                 <StatCard
-                    title="Total de Serviços"
+                    title="Total de Serviços por Pedido"
                     value={formatNumber(data.totalServiceOrders)}
-                    subtitle="Pedidos de serviço"
+                    subtitle="Quantidade de pedidos de serviço"
                     icon={Briefcase}
                     variant="info"
                 />
                 <StatCard
-                    title="Valor dos Serviços"
+                    title="Valor Total de Serviços por Pedido"
                     value={formatCurrency(data.totalServiceOrdersValue)}
-                    subtitle="Soma dos pedidos de serviço"
+                    subtitle="Soma dos valores de pedidos de serviço"
                     icon={DollarSign}
                     variant="success"
                 />
             </div>
 
-            {/* Grid principal com Top 10 */}
+            {/* Top 10 Fornecedores */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Top 10 Fornecedores */}
                 <motion.div
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -348,58 +306,28 @@ export default function DashboardPage() {
                     className="bg-card rounded-xl border p-5 h-fit"
                 >
                     <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-semibold text-card-foreground">
-                            Top 10 Fornecedores
-                        </h3>
+                        <h3 className="font-semibold text-card-foreground">Top 10 Fornecedores</h3>
                         <Building2 className="w-5 h-5 text-muted-foreground" />
                     </div>
-
                     <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                         {data.topSuppliers.map((supplier, index) => (
-                            <motion.div
-                                key={supplier.document}
-                                initial={{ opacity: 0, x: -10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: index * 0.05 }}
-                                className="flex items-center justify-between p-2 hover:bg-muted/30 rounded-lg transition-colors"
-                            >
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <div className={`
-                                        w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                                        ${index === 0 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-400' :
-                                            index === 1 ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' :
-                                                index === 2 ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400' :
-                                                    'bg-muted text-muted-foreground'
-                                        }
-                                    `}>
+                            <div key={supplier.document} className="flex items-center justify-between p-2 hover:bg-muted/30 rounded-lg">
+                                <div className="flex items-center gap-3">
+                                    <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
                                         {index + 1}
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-medium truncate">
-                                            {supplier.name}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {supplier.orderCount} pedido{supplier.orderCount !== 1 ? 's' : ''}
-                                        </p>
+                                    </span>
+                                    <div>
+                                        <p className="text-sm font-medium">{supplier.name}</p>
+                                        <p className="text-xs text-muted-foreground">{supplier.orderCount} pedidos</p>
                                     </div>
                                 </div>
-                                <div className="text-right">
-                                    <p className="text-sm font-bold text-primary">
-                                        {formatCurrency(supplier.totalValue)}
-                                    </p>
-                                </div>
-                            </motion.div>
+                                <p className="text-sm font-bold text-primary">{formatCurrency(supplier.totalValue)}</p>
+                            </div>
                         ))}
-
-                        {data.topSuppliers.length === 0 && (
-                            <p className="text-center text-muted-foreground py-4">
-                                Nenhum fornecedor encontrado no período
-                            </p>
-                        )}
                     </div>
                 </motion.div>
 
-                {/* Top 10 Itens Mais Pedidos */}
+                {/* Top 10 Itens */}
                 <motion.div
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -407,75 +335,36 @@ export default function DashboardPage() {
                     className="bg-card rounded-xl border p-5 h-fit"
                 >
                     <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-semibold text-card-foreground">
-                            Top 10 Itens Mais Pedidos
-                        </h3>
+                        <h3 className="font-semibold text-card-foreground">Top 10 Itens Mais Pedidos</h3>
                         <Package className="w-5 h-5 text-muted-foreground" />
                     </div>
-
                     <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                         {data.topItems.map((item, index) => (
-                            <motion.div
-                                key={`${item.name}-${index}`}
-                                initial={{ opacity: 0, x: -10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: index * 0.05 }}
-                                className="flex items-center justify-between p-2 hover:bg-muted/30 rounded-lg transition-colors"
-                            >
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <div className={`
-                                        w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                                        ${index === 0 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-400' :
-                                            index === 1 ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' :
-                                                index === 2 ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400' :
-                                                    'bg-muted text-muted-foreground'
-                                        }
-                                    `}>
+                            <div key={`${item.name}-${index}`} className="flex items-center justify-between p-2 hover:bg-muted/30 rounded-lg">
+                                <div className="flex items-center gap-3">
+                                    <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
                                         {index + 1}
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-medium truncate">
-                                            {item.name}
-                                        </p>
-                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                            <span className="bg-muted px-1.5 py-0.5 rounded-full">
-                                                {item.group}
-                                            </span>
-                                            <span>{item.orderCount}x</span>
-                                        </div>
+                                    </span>
+                                    <div>
+                                        <p className="text-sm font-medium">{item.name}</p>
+                                        <p className="text-xs text-muted-foreground">{item.group} • {item.orderCount}x</p>
                                     </div>
                                 </div>
-                                <div className="text-right">
-                                    <p className="text-sm font-bold text-primary">
-                                        {formatCurrency(item.totalValue)}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        {item.totalQuantity} un.
-                                    </p>
-                                </div>
-                            </motion.div>
+                                <p className="text-sm font-bold text-primary">{formatCurrency(item.totalValue)}</p>
+                            </div>
                         ))}
-
-                        {data.topItems.length === 0 && (
-                            <p className="text-center text-muted-foreground py-4">
-                                Nenhum item encontrado no período
-                            </p>
-                        )}
                     </div>
                 </motion.div>
             </div>
 
-            {/* Gráfico de pizza - Unidades de Medida */}
+            {/* Gráfico de Unidades */}
             <motion.div
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
                 className="bg-card rounded-xl border p-5"
             >
-                <h3 className="font-semibold text-card-foreground mb-4">
-                    Produtos por Unidade de Medida
-                </h3>
-
+                <h3 className="font-semibold text-card-foreground mb-4">Produtos por Unidade de Medida</h3>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-1">
                         <ResponsiveContainer width="100%" height={200}>
@@ -487,14 +376,10 @@ export default function DashboardPage() {
                                     innerRadius={50}
                                     outerRadius={80}
                                     dataKey="value"
-                                    paddingAngle={2}
                                     label={(entry) => entry.value > 0 ? entry.value : ''}
                                 >
                                     {data.unitMeasureData.map((entry, index) => (
-                                        <Cell
-                                            key={`cell-${index}`}
-                                            fill={getUnitColor(entry.name)}
-                                        />
+                                        <Cell key={`cell-${index}`} fill={getUnitColor(entry.name)} />
                                     ))}
                                 </Pie>
                                 <Tooltip
@@ -509,30 +394,17 @@ export default function DashboardPage() {
                             </PieChart>
                         </ResponsiveContainer>
                     </div>
-
                     <div className="lg:col-span-2">
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                             {data.unitMeasureData.map((item) => (
                                 <div key={item.name} className="flex items-center gap-2">
-                                    <div
-                                        className="w-3 h-3 rounded-full"
-                                        style={{ backgroundColor: item.fill }}
-                                    />
+                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.fill }} />
                                     <div>
-                                        <p className="text-xs font-medium truncate">
-                                            {item.name}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {item.value} produto{item.value !== 1 ? 's' : ''}
-                                        </p>
+                                        <p className="text-xs font-medium">{item.name}</p>
+                                        <p className="text-xs text-muted-foreground">{item.value} produtos</p>
                                     </div>
                                 </div>
                             ))}
-                        </div>
-                        <div className="mt-4 pt-3 border-t border-border">
-                            <p className="text-xs text-muted-foreground text-center">
-                                Total de {formatNumber(data.unitMeasureData.reduce((acc, curr) => acc + curr.value, 0))} produtos cadastrados
-                            </p>
                         </div>
                     </div>
                 </div>

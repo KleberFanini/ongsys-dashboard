@@ -1,6 +1,9 @@
+// src/components/TopBar.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSession, signOut } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import {
     Menu,
     Bell,
@@ -39,6 +42,8 @@ export function TopBar({
 }: TopBarProps) {
     const { toggleSidebar } = useSidebar()
     const [isDarkMode, setIsDarkMode] = useState(false)
+    const { data: session } = useSession()
+    const router = useRouter()
 
     // Verifica o tema inicial ao carregar
     useEffect(() => {
@@ -50,8 +55,6 @@ export function TopBar({
         const newDarkMode = !isDarkMode
         setIsDarkMode(newDarkMode)
 
-        console.log('Toggle tema para:', newDarkMode ? 'dark' : 'light')
-
         if (newDarkMode) {
             document.documentElement.classList.add('dark')
             localStorage.setItem('theme', 'dark')
@@ -60,6 +63,19 @@ export function TopBar({
             localStorage.setItem('theme', 'light')
         }
     }
+
+    const handleLogout = async () => {
+        await signOut({ redirect: true, callbackUrl: '/login' })
+    }
+
+    // Obter iniciais do nome do usuário para o avatar
+    const getUserInitials = () => {
+        if (!session?.user?.name) return 'U'
+        const names = session.user.name.split(' ')
+        if (names.length === 1) return names[0].charAt(0).toUpperCase()
+        return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase()
+    }
+
     return (
         <header className={cn(
             "sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
@@ -67,7 +83,6 @@ export function TopBar({
         )}>
             <div className="flex h-16 items-center justify-between px-4">
                 <div className="flex items-center gap-4">
-                    {/* Botão do menu para mobile/sidebar */}
                     <Button
                         variant="ghost"
                         size="icon"
@@ -76,6 +91,7 @@ export function TopBar({
                     >
                         <Menu className="h-5 w-5" />
                     </Button>
+                    {title && <h1 className="text-lg font-semibold text-foreground">{title}</h1>}
                 </div>
 
                 {/* Ícones e ações da direita */}
@@ -104,14 +120,18 @@ export function TopBar({
                                     className="flex items-center gap-2 px-2 hover:bg-accent"
                                 >
                                     <Avatar className="h-8 w-8">
-                                        <AvatarImage src="https://github.com/shadcn.png" />
-                                        <AvatarFallback>
-                                            <User className="h-4 w-4" />
+                                        {/* Removido AvatarImage pois não temos URL de imagem */}
+                                        <AvatarFallback className="bg-primary/10 text-primary">
+                                            {getUserInitials()}
                                         </AvatarFallback>
                                     </Avatar>
                                     <div className="hidden md:flex flex-col items-start text-sm">
-                                        <span className="font-medium text-foreground">Admin User</span>
-                                        <span className="text-xs text-muted-foreground">admin@ongsys.com</span>
+                                        <span className="font-medium text-foreground">
+                                            {session?.user?.name || 'Usuário'}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                            {session?.user?.email || ''}
+                                        </span>
                                     </div>
                                     <ChevronDown className="h-4 w-4 text-muted-foreground hidden md:block" />
                                 </Button>
@@ -119,16 +139,16 @@ export function TopBar({
                             <DropdownMenuContent align="end" className="w-56">
                                 <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => router.push('/perfil')}>
                                     <User className="mr-2 h-4 w-4" />
                                     <span>Perfil</span>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => router.push('/configuracoes')}>
                                     <Settings className="mr-2 h-4 w-4" />
                                     <span>Configurações</span>
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem className="text-destructive">
+                                <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
                                     <LogOut className="mr-2 h-4 w-4" />
                                     <span>Sair</span>
                                 </DropdownMenuItem>
