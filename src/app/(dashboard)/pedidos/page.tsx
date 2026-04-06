@@ -351,25 +351,35 @@ export default function PedidosPage() {
     }, [])
 
     // Carregar dados apenas quando autenticado e não carregou ainda
+    const hasLoadedRef = useRef(false);
+
     useEffect(() => {
+        let isMounted = true;
+
+        // Evitar múltiplas chamadas
+        if (hasLoadedRef.current) return;
+
         console.log('🔄 useEffect executado:', {
             isAuthenticated,
             hasLoaded,
             authLoading,
-            shouldLoad: isAuthenticated && !hasLoaded && !authLoading
+            shouldLoad: isAuthenticated && !hasLoaded && !authLoading && isMounted
         })
 
-        if (isAuthenticated && !hasLoaded && !authLoading) {
+        if (isAuthenticated && !hasLoaded && !authLoading && isMounted) {
             console.log('🚀 Chamando loadAllPages...')
+            hasLoadedRef.current = true;
             loadAllPages()
         }
 
         return () => {
-            if (abortControllerRef.current) {
-                abortControllerRef.current.abort()
-            }
+            isMounted = false;
+            // Não abortar automaticamente para evitar erros
+            // if (abortControllerRef.current) {
+            //     abortControllerRef.current.abort()
+            // }
         }
-    }, [isAuthenticated, hasLoaded, authLoading])
+    }, [isAuthenticated, hasLoaded, authLoading, loadAllPages])
 
     // Paginação local
     const paginatedOrders = filteredOrders.slice(

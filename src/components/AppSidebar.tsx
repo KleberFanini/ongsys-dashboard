@@ -4,9 +4,10 @@ import {
     BarChart3,
     Users,
     Package,
+    Package2,
     CreditCard,
-    LogOut,
     LayoutDashboard,
+    Shield
 } from "lucide-react"
 import { NavLink } from "./NavLink"
 import { useRouter } from "next/navigation"
@@ -22,25 +23,45 @@ import {
     SidebarFooter,
     useSidebar,
 } from "./ui/sidebar"
-import { Button } from "./ui/button"
-
-const items = [
-    { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { title: "Fornecedores", href: "/fornecedores", icon: Users },
-    { title: "Contas", href: "/contas", icon: CreditCard },
-    { title: "Produtos", href: "/produtos", icon: Package },
-    { title: "Pedidos", href: "/pedidos", icon: Package },
-]
+import { useAuth } from '@/src/hooks/useAuth'
 
 export function AppSidebar() {
     const { state } = useSidebar()
     const collapsed = state === "collapsed"
     const router = useRouter()
+    const { isSuperAdmin } = useAuth()
 
-    const handleLogout = () => {
-        localStorage.removeItem("erp_auth")
-        router.push("/")
+    const menuItems = [
+        {
+            title: "Dashboard",
+            url: "/dashboard",
+            icon: LayoutDashboard,
+        },
+        {
+            title: "Fornecedores",
+            url: "/fornecedores",
+            icon: Users,
+        },
+        {
+            title: "Produtos",
+            url: "/produtos",
+            icon: Package2,
+        },
+        {
+            title: "Pedidos",
+            url: "/pedidos",
+            icon: Package,
+        },
+    ]
+
+    // Item Admin aparece apenas para SUPER_ADMIN
+    const adminItem = {
+        title: "Admin",
+        url: "/admin",
+        icon: Shield,
     }
+
+    const allMenuItems = isSuperAdmin ? [...menuItems, adminItem] : menuItems
 
     return (
         <Sidebar collapsible="icon">
@@ -58,12 +79,12 @@ export function AppSidebar() {
                     </SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
-                            {items.map((item) => (
+                            {allMenuItems.map((item) => (
                                 <SidebarMenuItem key={item.title}>
                                     <SidebarMenuButton asChild>
                                         <NavLink
-                                            href={item.href}
-                                            exact={item.href === "/dashboard"}
+                                            href={item.url}
+                                            exact={item.url === "/dashboard"}
                                             className="hover:bg-[hsl(222,47%,16%)]"
                                             activeClassName="bg-[hsl(222,47%,16%)] text-white font-medium"
                                         >

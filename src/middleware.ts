@@ -5,23 +5,22 @@ import { NextResponse } from 'next/server'
 export default withAuth(
     function middleware(req) {
         const token = req.nextauth.token
-        const path = req.nextUrl.pathname
 
-        // Rotas protegidas do dashboard
-        if (path.startsWith('/dashboard') && !token) {
-            return NextResponse.redirect(new URL('/login', req.url))
+        // Ignorar durante desenvolvimento/hot reload
+        if (process.env.NODE_ENV === 'development' && req.nextUrl.pathname.includes('/_next')) {
+            return NextResponse.next()
         }
 
-        // Redirecionar login se já estiver autenticado
-        if (path === '/login' && token) {
-            return NextResponse.redirect(new URL('/dashboard', req.url))
-        }
-
+        // Apenas verificar se está autenticado
+        // As permissões específicas serão tratadas nas páginas individuais
         return NextResponse.next()
     },
     {
         callbacks: {
-            authorized: ({ token }) => true
+            authorized: ({ token }) => !!token
+        },
+        pages: {
+            signIn: '/login'
         }
     }
 )
@@ -32,6 +31,8 @@ export const config = {
         '/pedidos/:path*',
         '/fornecedores/:path*',
         '/produtos/:path*',
-        '/login'
+        '/admin/:path*',
+        '/configuracoes/:path*',
+        '/teste-permissoes/:path*'
     ]
 }

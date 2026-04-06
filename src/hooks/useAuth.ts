@@ -1,26 +1,42 @@
 // src/hooks/useAuth.ts
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
-export function useAuth(requiredRole?: string) {
+export type Role = 'SUPER_ADMIN' | 'OPERADOR_SEDE' | 'CONSULTOR'
+
+export function useAuth(requiredRole?: Role) {
     const { data: session, status } = useSession()
     const router = useRouter()
+    const hasRedirected = useRef(false)
 
     useEffect(() => {
         if (status === 'loading') return
-        if (!session) {
-            router.push('/login')
-        }
-    }, [session, status, router])
+        if (hasRedirected.current) return
 
-    console.log('🔐 useAuth status:', { status, hasSession: !!session, role: session?.user?.role })
+        if (!session) {
+            hasRedirected.current = true
+            router.push('/login')
+            return
+        }
+
+        if (requiredRole && session.user?.role !== requiredRole && session.user?.role !== 'SUPER_ADMIN') {
+            hasRedirected.current = true
+            router.push('/dashboard')
+            return
+        }
+    }, [session, status, router, requiredRole])
+
+    const role = session?.user?.role as Role | undefined
 
     return {
         session,
         isLoading: status === 'loading',
         isAuthenticated: !!session,
         user: session?.user,
-        role: session?.user?.role,
+        role,
+        isSuperAdmin: role === 'SUPER_ADMIN',
+        isOperador: role === 'OPERADOR_SEDE',
+        isConsultor: role === 'CONSULTOR'
     }
-} ''
+}
