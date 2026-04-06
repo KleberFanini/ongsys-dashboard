@@ -133,6 +133,7 @@ export default function PedidosPage() {
     const [timelineFilter, setTimelineFilter] = useState<'todos' | 'etapas'>('todos')
     const abortControllerRef = useRef<AbortController | null>(null)
     const [hasLoaded, setHasLoaded] = useState(false)
+    const [loadError, setLoadError] = useState<string | null>(null)
 
     // Calcular estatísticas de etapas baseado nos pedidos carregados
     const etapasEstatisticas = useMemo(() => {
@@ -213,8 +214,11 @@ export default function PedidosPage() {
 
     // Carregar todas as páginas em lotes
     const loadAllPages = useCallback(async () => {
+        console.log('🔵 [1] loadAllPages iniciado')
+
         // Verificar cache primeiro
         try {
+            console.log('🔵 [2] Verificando cache...')
             const cached = localStorage.getItem(CACHE_KEY)
             if (cached) {
                 const data: CacheData = JSON.parse(cached)
@@ -241,15 +245,20 @@ export default function PedidosPage() {
 
         setLoading(true)
         setHasLoaded(false)
+        setLoadError(null)
 
         try {
+            console.log('🔵 [3] Buscando primeira página...')
             const primeiraRes = await fetch('/api/pedidos?page=1', { signal: controller.signal })
+            console.log('🔵 [4] Resposta status:', primeiraRes.status)
 
             if (!primeiraRes.ok) {
-                throw new Error(`HTTP ${primeiraRes.status}`)
+                throw new Error(`HTTP ${primeiraRes.status}: ${primeiraRes.statusText}`)
             }
 
             const primeiraData = await primeiraRes.json()
+            console.log('🔵 [5] Dados:', { total: primeiraData.total, dataLength: primeiraData.data?.length })
+
             const totalPedidos = primeiraData.total || 0
             const totalPaginas = Math.ceil(totalPedidos / 100)
 
@@ -268,6 +277,7 @@ export default function PedidosPage() {
             setLoadingProgress({ current: 1, total: totalPaginas })
 
             if (totalPaginas > 1) {
+                console.log('🔵 [6] Carregando páginas restantes...')
                 const paginasRestantes = []
                 for (let p = 2; p <= totalPaginas; p++) {
                     paginasRestantes.push(p)
@@ -284,6 +294,7 @@ export default function PedidosPage() {
                     )
 
                     const results = await Promise.all(promises)
+                    console.log('🔵 [7] Lote carregado')
 
                     results.forEach((result, idx) => {
                         if (result.error) {
@@ -309,7 +320,7 @@ export default function PedidosPage() {
                 }
             }
 
-            console.log(`✅ ${allData.length} pedidos carregados`)
+            console.log(`🔵 [8] ✅ ${allData.length} pedidos carregados`)
             setAllOrders(allData)
             setTotalItems(totalPedidos)
             setTotalPages(Math.ceil(totalPedidos / PAGE_SIZE))
@@ -327,12 +338,11 @@ export default function PedidosPage() {
             }
 
         } catch (error: any) {
-            if (error.name !== 'AbortError') {
-                console.error('Erro ao carregar pedidos:', error)
-                setAllOrders([])
-                setTotalItems(0)
-                setTotalPages(1)
-            }
+            console.error('🔵 [ERRO]', error)
+            setLoadError(error.message)
+            setAllOrders([])
+            setTotalItems(0)
+            setTotalPages(1)
         } finally {
             setLoading(false)
             setHasLoaded(true)
@@ -342,16 +352,24 @@ export default function PedidosPage() {
 
     // Carregar dados apenas quando autenticado e não carregou ainda
     useEffect(() => {
-        if (isAuthenticated && !hasLoaded) {
-            console.log('🚀 Iniciando carregamento dos pedidos...')
+        console.log('🔄 useEffect executado:', {
+            isAuthenticated,
+            hasLoaded,
+            authLoading,
+            shouldLoad: isAuthenticated && !hasLoaded && !authLoading
+        })
+
+        if (isAuthenticated && !hasLoaded && !authLoading) {
+            console.log('🚀 Chamando loadAllPages...')
             loadAllPages()
         }
+
         return () => {
             if (abortControllerRef.current) {
                 abortControllerRef.current.abort()
             }
         }
-    }, [isAuthenticated, hasLoaded, loadAllPages])
+    }, [isAuthenticated, hasLoaded, authLoading])
 
     // Paginação local
     const paginatedOrders = filteredOrders.slice(
@@ -384,6 +402,29 @@ export default function PedidosPage() {
 
     if (!isAuthenticated) {
         return null
+    }
+
+    // Mostrar erro se houver
+    if (loadError) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen p-6">
+                <div className="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-lg max-w-md">
+                    <h2 className="font-semibold">Erro ao carregar pedidos</h2>
+                    <p className="text-sm mt-1">{loadError}</p>
+                    <Button
+                        variant="outline"
+                        className="mt-3"
+                        onClick={() => {
+                            setHasLoaded(false)
+                            setLoadError(null)
+                            loadAllPages()
+                        }}
+                    >
+                        Tentar novamente
+                    </Button>
+                </div>
+            </div>
+        )
     }
 
     // Mostrar loading com progresso enquanto carrega todas as páginas
@@ -614,7 +655,6 @@ export default function PedidosPage() {
                                 <th className="text-center p-3 text-muted-foreground font-medium">Status</th>
                                 <th className="text-center p-3 text-muted-foreground font-medium hidden lg:table-cell">Etapa Atual</th>
                                 <th className="text-center p-3 text-muted-foreground font-medium">Ações</th>
-                                \)
                             </tr>
                         </thead>
                         <tbody>
@@ -710,7 +750,7 @@ export default function PedidosPage() {
                 )}
             </div>
 
-            {/* Modal de detalhes */}
+            {/* Modal de detalhes - mantido igual */}
             <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
                 <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
                     <DialogHeader>
