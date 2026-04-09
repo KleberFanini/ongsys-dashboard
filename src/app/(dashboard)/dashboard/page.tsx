@@ -9,11 +9,11 @@ import {
     Calendar,
     Filter,
     X,
-    Building2
+    Building2,
+    AlertCircle
 } from "lucide-react"
 import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-    ResponsiveContainer, PieChart, Pie, Cell
+    ResponsiveContainer, PieChart, Pie, Cell, Tooltip
 } from "recharts"
 import { StatCard } from "@/src/components/StatCard"
 import { Skeleton } from "@/src/components/ui/skeleton"
@@ -36,6 +36,7 @@ export default function DashboardPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [isDarkMode, setIsDarkMode] = useState(false)
+    const [partialData, setPartialData] = useState(false)
 
     // Estados para filtros
     const [startDate, setStartDate] = useState('')
@@ -76,6 +77,9 @@ export default function DashboardPage() {
         if (!isAuthenticated) return
 
         setLoading(true)
+        setPartialData(true)
+        setError(null)
+
         try {
             const params = new URLSearchParams()
             if (startDate) params.append('startDate', startDate)
@@ -84,16 +88,34 @@ export default function DashboardPage() {
                 params.append('costCenter', selectedCostCenter)
             }
 
-            const response = await fetch(`/api/dashboard?${params.toString()}`)
+            // 🔥 AUMENTAR TIMEOUT para 10 MINUTOS (600000 ms)
+            const controller = new AbortController()
+            const timeoutId = setTimeout(() => controller.abort(), 600000)
+
+            console.log('🔄 Buscando dados do dashboard... (timeout: 10 minutos)')
+
+            const response = await fetch(`/api/dashboard?${params.toString()}`, {
+                signal: controller.signal
+            })
+
+            clearTimeout(timeoutId)
+
             if (!response.ok) throw new Error('Erro ao carregar dados')
             const json = await response.json()
 
+            console.log('✅ Dados recebidos com sucesso!')
             setData(json)
             setAvailableCostCenters(json.availableCostCenters || [])
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Erro desconhecido')
+        } catch (err: any) {
+            console.error('❌ Erro no fetch:', err)
+            if (err.name === 'AbortError') {
+                setError('A requisição demorou muito tempo (mais de 10 minutos). O servidor pode estar lento. Tente novamente mais tarde.')
+            } else {
+                setError(err instanceof Error ? err.message : 'Erro desconhecido')
+            }
         } finally {
             setLoading(false)
+            setPartialData(false)
         }
     }
 
@@ -134,7 +156,10 @@ export default function DashboardPage() {
         return (
             <div className="p-6">
                 <div className="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-lg">
-                    <h2 className="font-semibold">Erro ao carregar dashboard</h2>
+                    <div className="flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5" />
+                        <h2 className="font-semibold">Erro ao carregar dashboard</h2>
+                    </div>
                     <p className="text-sm mt-1">{error}</p>
                     <Button
                         variant="outline"
@@ -173,6 +198,13 @@ export default function DashboardPage() {
 
     return (
         <div className="space-y-6 animate-fade-in p-6">
+            {/* Indicador de carregamento parcial */}
+            {partialData && (
+                <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 p-2 rounded-lg text-sm text-center">
+                    ⚠️ Atualizando dados... Esta operação pode levar alguns segundos.
+                </div>
+            )}
+
             {/* Cabeçalho */}
             <div className="flex items-center justify-between">
                 <div>
@@ -296,7 +328,7 @@ export default function DashboardPage() {
                 />
             </div>
 
-            {/* Top 10 Fornecedores */}
+            {/* Top 10 Fornecedores e Itens */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <motion.div
                     initial={{ opacity: 0, y: 12 }}
@@ -309,24 +341,29 @@ export default function DashboardPage() {
                         <Building2 className="w-5 h-5 text-muted-foreground" />
                     </div>
                     <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                        {data.topSuppliers.map((supplier, index) => (
-                            <div key={supplier.document} className="flex items-center justify-between p-2 hover:bg-muted/30 rounded-lg">
-                                <div className="flex items-center gap-3">
-                                    <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
-                                        {index + 1}
-                                    </span>
-                                    <div>
-                                        <p className="text-sm font-medium">{supplier.name}</p>
-                                        <p className="text-xs text-muted-foreground">{supplier.orderCount} pedidos</p>
+                        {data.topSuppliers.length > 0 ? (
+                            data.topSuppliers.map((supplier, index) => (
+                                <div key={supplier.document} className="flex items-center justify-between p-2 hover:bg-muted/30 rounded-lg">
+                                    <div className="flex items-center gap-3">
+                                        <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
+                                            {index + 1}
+                                        </span>
+                                        <div>
+                                            <p className="text-sm font-medium">{supplier.name}</p>
+                                            <p className="text-xs text-muted-foreground">{supplier.orderCount} pedidos</p>
+                                        </div>
                                     </div>
+                                    <p className="text-sm font-bold text-primary">{formatCurrency(supplier.totalValue)}</p>
                                 </div>
-                                <p className="text-sm font-bold text-primary">{formatCurrency(supplier.totalValue)}</p>
+                            ))
+                        ) : (
+                            <div className="text-center text-muted-foreground py-8">
+                                Nenhum fornecedor encontrado
                             </div>
-                        ))}
+                        )}
                     </div>
                 </motion.div>
 
-                {/* Top 10 Itens */}
                 <motion.div
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -338,76 +375,84 @@ export default function DashboardPage() {
                         <Package className="w-5 h-5 text-muted-foreground" />
                     </div>
                     <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                        {data.topItems.map((item, index) => (
-                            <div key={`${item.name}-${index}`} className="flex items-center justify-between p-2 hover:bg-muted/30 rounded-lg">
-                                <div className="flex items-center gap-3">
-                                    <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
-                                        {index + 1}
-                                    </span>
-                                    <div>
-                                        <p className="text-sm font-medium">{item.name}</p>
-                                        <p className="text-xs text-muted-foreground">{item.group} • {item.orderCount}x</p>
+                        {data.topItems.length > 0 ? (
+                            data.topItems.map((item, index) => (
+                                <div key={`${item.name}-${index}`} className="flex items-center justify-between p-2 hover:bg-muted/30 rounded-lg">
+                                    <div className="flex items-center gap-3">
+                                        <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
+                                            {index + 1}
+                                        </span>
+                                        <div>
+                                            <p className="text-sm font-medium">{item.name}</p>
+                                            <p className="text-xs text-muted-foreground">{item.group} • {item.orderCount}x</p>
+                                        </div>
                                     </div>
+                                    <p className="text-sm font-bold text-primary">{formatCurrency(item.totalValue)}</p>
                                 </div>
-                                <p className="text-sm font-bold text-primary">{formatCurrency(item.totalValue)}</p>
+                            ))
+                        ) : (
+                            <div className="text-center text-muted-foreground py-8">
+                                Nenhum item encontrado
                             </div>
-                        ))}
+                        )}
                     </div>
                 </motion.div>
             </div>
 
             {/* Gráfico de Unidades */}
-            <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-                className="bg-card rounded-xl border p-5"
-            >
-                <h3 className="font-semibold text-card-foreground mb-4">Produtos por Unidade de Medida</h3>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-1">
-                        <ResponsiveContainer width="100%" height={200}>
-                            <PieChart>
-                                <Pie
-                                    data={data.unitMeasureData}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={50}
-                                    outerRadius={80}
-                                    dataKey="value"
-                                    label={(entry) => entry.value > 0 ? entry.value : ''}
-                                >
-                                    {data.unitMeasureData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={getUnitColor(entry.name)} />
-                                    ))}
-                                </Pie>
-                                <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
-                                        border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
-                                        borderRadius: '8px',
-                                        fontSize: '12px',
-                                    }}
-                                    formatter={(value: any) => [`${value} produtos`, 'Quantidade']}
-                                />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-                    <div className="lg:col-span-2">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            {data.unitMeasureData.map((item) => (
-                                <div key={item.name} className="flex items-center gap-2">
-                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.fill }} />
-                                    <div>
-                                        <p className="text-xs font-medium">{item.name}</p>
-                                        <p className="text-xs text-muted-foreground">{item.value} produtos</p>
+            {data.unitMeasureData.length > 0 && (
+                <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                    className="bg-card rounded-xl border p-5"
+                >
+                    <h3 className="font-semibold text-card-foreground mb-4">Produtos por Unidade de Medida</h3>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-1">
+                            <ResponsiveContainer width="100%" height={200}>
+                                <PieChart>
+                                    <Pie
+                                        data={data.unitMeasureData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={50}
+                                        outerRadius={80}
+                                        dataKey="value"
+                                        label={(entry) => entry.value > 0 ? entry.value : ''}
+                                    >
+                                        {data.unitMeasureData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={getUnitColor(entry.name)} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
+                                            border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+                                            borderRadius: '8px',
+                                            fontSize: '12px',
+                                        }}
+                                        formatter={(value: any) => [`${value} produtos`, 'Quantidade']}
+                                    />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="lg:col-span-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                {data.unitMeasureData.map((item) => (
+                                    <div key={item.name} className="flex items-center gap-2">
+                                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.fill }} />
+                                        <div>
+                                            <p className="text-xs font-medium">{item.name}</p>
+                                            <p className="text-xs text-muted-foreground">{item.value} produtos</p>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
                         </div>
                     </div>
-                </div>
-            </motion.div>
+                </motion.div>
+            )}
         </div>
     )
 }

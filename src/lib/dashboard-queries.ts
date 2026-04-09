@@ -9,12 +9,17 @@ import { getCostCenterName } from './cost-centers-map'
 
 // Função para extrair valor do pedido (soma dos itens)
 function extractValueFromPedido(pedido: any): number {
-  // Tentar encontrar valor no nível do pedido
-  if (pedido.valorTotal) return parseFloat(pedido.valorTotal)
-  if (pedido.valor_total) return parseFloat(pedido.valor_total)
-  if (pedido.total) return parseFloat(pedido.total)
+  if (pedido.valorTotal && typeof pedido.valorTotal === 'number') {
+    return pedido.valorTotal
+  }
+  if (pedido.valor_total && typeof pedido.valor_total === 'number') {
+    return pedido.valor_total
+  }
+  if (pedido.total && typeof pedido.total === 'number') {
+    return pedido.total
+  }
 
-  // Tentar encontrar nos itens
+  // Fallback: Tentar encontrar nos itens
   if (pedido.itensPedido && Array.isArray(pedido.itensPedido)) {
     const total = pedido.itensPedido.reduce((acc: number, item: any) => {
       const quantidade = parseFloat(item.quantidade) || 0

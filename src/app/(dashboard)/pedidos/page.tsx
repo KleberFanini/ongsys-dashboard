@@ -51,7 +51,8 @@ const CACHE_DURATION = 10 * 60 * 1000
 
 interface Order {
     id: number
-    id_pedido: string
+    id_requisicao: string
+    id_pedido?: string
     titulo: string
     status_pedido: string
     fornecedor_nome: string
@@ -186,7 +187,7 @@ export default function PedidosPage() {
             const searchLower = search.toLowerCase()
             filtered = filtered.filter(order =>
                 order.titulo?.toLowerCase().includes(searchLower) ||
-                order.id_pedido?.toLowerCase().includes(searchLower) ||
+                order.id_requisicao?.toLowerCase().includes(searchLower) ||
                 order.fornecedor_nome?.toLowerCase().includes(searchLower)
             )
         }
@@ -231,6 +232,9 @@ export default function PedidosPage() {
                     setHasLoaded(true)
                     return
                 }
+            } else {
+                console.log('⚠️ Cache inválido (vazio ou expirado), buscando novos dados...')
+                localStorage.removeItem(CACHE_KEY) // Remove cache inválido
             }
         } catch (e) {
             console.warn('Erro ao ler cache:', e)
@@ -266,11 +270,7 @@ export default function PedidosPage() {
 
             const pedidosComValor = (primeiraData.data || []).map((order: any) => ({
                 ...order,
-                valor_total: order.itens_pedido?.reduce((acc: number, item: any) => {
-                    const quantidade = parseFloat(item.quantidade) || 0
-                    const valorUnitario = parseFloat(item.valorUnitario) || 0
-                    return acc + (quantidade * valorUnitario)
-                }, 0) || 0
+                valor_total: order.valorTotal || 0
             }))
 
             let allData = [...pedidosComValor]
@@ -302,11 +302,7 @@ export default function PedidosPage() {
                         } else if (result.data) {
                             const pedidos = (result.data || []).map((order: any) => ({
                                 ...order,
-                                valor_total: order.itens_pedido?.reduce((acc: number, item: any) => {
-                                    const quantidade = parseFloat(item.quantidade) || 0
-                                    const valorUnitario = parseFloat(item.valorUnitario) || 0
-                                    return acc + (quantidade * valorUnitario)
-                                }, 0) || 0
+                                valor_total: order.valorTotal || 0
                             }))
                             allData.push(...pedidos)
                         }
@@ -657,7 +653,7 @@ export default function PedidosPage() {
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-border bg-muted/50">
-                                <th className="text-left p-3 text-muted-foreground font-medium">ID</th>
+                                <th className="text-left p-3 text-muted-foreground font-medium">ID Requisição</th>
                                 <th className="text-left p-3 text-muted-foreground font-medium">Título</th>
                                 <th className="text-left p-3 text-muted-foreground font-medium hidden md:table-cell">Fornecedor</th>
                                 <th className="text-left p-3 text-muted-foreground font-medium hidden lg:table-cell">Data</th>
@@ -672,13 +668,13 @@ export default function PedidosPage() {
                                 const etapaAtual = identificarEtapaAtual(order.logs || [])
                                 return (
                                     <motion.tr
-                                        key={order.id || order.id_pedido}
+                                        key={order.id || order.id_requisicao}
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: index * 0.03 }}
                                         className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                                     >
-                                        <td className="p-3 font-mono text-xs text-card-foreground">{order.id_pedido}</td>
+                                        <td className="p-3 font-mono text-xs text-card-foreground">{order.id_requisicao}</td>
                                         <td className="p-3 text-card-foreground font-medium max-w-[200px] truncate">{order.titulo}</td>
                                         <td className="p-3 hidden md:table-cell text-card-foreground">{order.fornecedor_nome || '---'}</td>
                                         <td className="p-3 hidden lg:table-cell text-muted-foreground">
@@ -765,7 +761,7 @@ export default function PedidosPage() {
                 <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="text-xl">
-                            Detalhes do Pedido #{selectedOrder?.id_pedido}
+                            Detalhes do Pedido #{selectedOrder?.id_requisicao}
                         </DialogTitle>
                     </DialogHeader>
                     {selectedOrder && (
@@ -779,7 +775,7 @@ export default function PedidosPage() {
 
                             <TabsContent value="detalhes" className="space-y-4 mt-4">
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><p className="text-xs text-muted-foreground">ID</p><p className="text-sm font-medium">{selectedOrder.id_pedido}</p></div>
+                                    <div><p className="text-xs text-muted-foreground">ID Requisição</p><p className="text-sm font-medium">{selectedOrder.id_requisicao}</p></div>
                                     <div><p className="text-xs text-muted-foreground">Status</p><Badge variant="outline" className={getStatusColor(selectedOrder.status_pedido || '')}>{selectedOrder.status_pedido}</Badge></div>
                                 </div>
                                 <div><p className="text-xs text-muted-foreground">Título</p><p className="text-sm">{selectedOrder.titulo}</p></div>

@@ -1,4 +1,3 @@
-// src/app/api/pedidos/route.ts - Versão otimizada
 import { NextRequest, NextResponse } from 'next/server';
 import { pedidosService } from '@/src/lib/api/services';
 
@@ -11,38 +10,31 @@ export async function GET(request: NextRequest) {
         const tipo = searchParams.get('tipo') || '';
         const limit = searchParams.get('limit');
 
-        // 🔥 Se for uma requisição com limit (como a do frontend), buscar apenas primeira página
         if (limit === '10000') {
             const result = await pedidosService.listar({}, 1);
             const pedidos = result.data || [];
 
             const pedidosAdaptados = pedidos.map((p: any) => ({
                 id: p.idRequisicao,
-                id_Requisicao: p.idRequisicao,
-                titulo: p.titulo,
-                status_pedido: p.statusPedido,
-                fornecedor_nome: p.fornecedor?.nome,
-                fornecedor_documento: p.fornecedor?.documento,
-                requisitante: p.requisitante,
-                data_pedido: p.dataPedido,
-                tipo_pedido: p.tipoPedido,
+                id_requisicao: p.idRequisicao || '',
+                id_pedido: p.idPedido || '',
+                titulo: p.titulo || '',
+                status_pedido: p.statusPedido || '',
+                fornecedor_nome: p.fornecedor?.nome || '',
+                fornecedor_documento: p.fornecedor?.documento || '',
+                requisitante: p.requisitante || '',
+                data_pedido: p.dataPedido || '',
+                tipo_pedido: p.tipoPedido || '',
                 local_entrega: p.localEntrega,
-                itens_pedido: p.itensPedido,
-                logs: p.logs,
-                descricao_pedido: p.descricaoPedido,
-                justificativa_compra: p.justificativaCompra
+                itens_pedido: p.itensPedido || [],
+                logs: p.logs || [],
+                descricao_pedido: p.descricaoPedido || '',
+                justificativa_compra: p.justificativaCompra || '',
+                fonte_pagadora: p.fontePagadora || '',
+                conta_plano_financeiro: p.contaPlanoFinanceiro || '',
+                // 🔥 USAR O valorTotal DA API
+                valor_total: p.valorTotal || 0
             }));
-
-            // Calcular valor total
-            pedidosAdaptados.forEach((pedido: any) => {
-                if (pedido.itens_pedido && Array.isArray(pedido.itens_pedido)) {
-                    pedido.valor_total = pedido.itens_pedido.reduce((acc: number, item: any) => {
-                        const quantidade = parseFloat(item.quantidade) || 0;
-                        const valorUnitario = parseFloat(item.valorUnitario) || 0;
-                        return acc + (quantidade * valorUnitario);
-                    }, 0);
-                }
-            });
 
             return NextResponse.json({
                 data: pedidosAdaptados,
@@ -63,6 +55,7 @@ export async function GET(request: NextRequest) {
             pedidos = pedidos.filter((p: any) =>
                 p.titulo?.toLowerCase().includes(searchLower) ||
                 p.idRequisicao?.toLowerCase().includes(searchLower) ||
+                p.idPedido?.toLowerCase().includes(searchLower) ||
                 p.fornecedor?.nome?.toLowerCase().includes(searchLower)
             );
         }
@@ -77,31 +70,24 @@ export async function GET(request: NextRequest) {
 
         const pedidosAdaptados = pedidos.map((p: any) => ({
             id: p.idRequisicao,
-            id_Requisicao: p.idRequisicao,
-            titulo: p.titulo,
-            status_pedido: p.statusPedido,
-            fornecedor_nome: p.fornecedor?.nome,
-            fornecedor_documento: p.fornecedor?.documento,
-            requisitante: p.requisitante,
-            data_pedido: p.dataPedido,
-            tipo_pedido: p.tipoPedido,
+            id_requisicao: p.idRequisicao || '',
+            id_pedido: p.idPedido || '',
+            titulo: p.titulo || '',
+            status_pedido: p.statusPedido || '',
+            fornecedor_nome: p.fornecedor?.nome || '',
+            fornecedor_documento: p.fornecedor?.documento || '',
+            requisitante: p.requisitante || '',
+            data_pedido: p.dataPedido || '',
+            tipo_pedido: p.tipoPedido || '',
             local_entrega: p.localEntrega,
-            itens_pedido: p.itensPedido,
-            logs: p.logs,
-            descricao_pedido: p.descricaoPedido,
-            justificativa_compra: p.justificativaCompra
+            itens_pedido: p.itensPedido || [],
+            logs: p.logs || [],
+            descricao_pedido: p.descricaoPedido || '',
+            justificativa_compra: p.justificativaCompra || '',
+            fonte_pagadora: p.fontePagadora || '',
+            conta_plano_financeiro: p.contaPlanoFinanceiro || '',
+            valor_total: p.valorTotal || 0
         }));
-
-        // Calcular valor total
-        pedidosAdaptados.forEach((pedido: any) => {
-            if (pedido.itens_pedido && Array.isArray(pedido.itens_pedido)) {
-                pedido.valor_total = pedido.itens_pedido.reduce((acc: number, item: any) => {
-                    const quantidade = parseFloat(item.quantidade) || 0;
-                    const valorUnitario = parseFloat(item.valorUnitario) || 0;
-                    return acc + (quantidade * valorUnitario);
-                }, 0);
-            }
-        });
 
         return NextResponse.json({
             data: pedidosAdaptados,
