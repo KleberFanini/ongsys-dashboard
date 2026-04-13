@@ -46,14 +46,30 @@ export async function getDashboardSummaryFromAPI(filters?: DateFilter): Promise<
     // 🔥 OBTER SESSÃO DO SERVIDOR PARA VERIFICAR O USUÁRIO
     const session = await getServerSession(authOptions)
     const userRole = session?.user?.role
-    const userCentroCusto = session?.user?.centroCusto
+    const userCentrosCusto: string[] = session?.user?.centrosCusto ?? []
 
     let { startDate, endDate, costCenter } = filters || {}
 
-    // 🔥 SE FOR CONSULTOR, FORÇAR O FILTRO PELO CENTRO DE CUSTO DELE
-    if (userRole === 'CONSULTOR' && userCentroCusto) {
-      costCenter = userCentroCusto
-      console.log(`🔒 Consultor filtrado por centro: ${userCentroCusto}`)
+    // 🔥 DEFINIR QUAIS CENTROS SERÃO USADOS NO FILTRO
+    let centrosCustoParaFiltrar: string[] = []
+
+    if (userRole === 'CONSULTOR') {
+      // CONSULTOR: usa os centros dele OU o filtro selecionado (se for um dos seus)
+      if (costCenter && costCenter !== 'todos' && userCentrosCusto.includes(costCenter)) {
+        // Se o usuário selecionou um centro específico que está na lista dele
+        centrosCustoParaFiltrar = [costCenter]
+        console.log(`🔒 Consultor filtrado por centro selecionado: ${costCenter}`)
+      } else {
+        // Senão, usa todos os centros dele
+        centrosCustoParaFiltrar = userCentrosCusto
+        console.log(`🔒 Consultor filtrado por todos os seus centros: ${centrosCustoParaFiltrar.join(', ')}`)
+      }
+    } else if (costCenter && costCenter !== 'todos') {
+      // SUPER_ADMIN ou OPERADOR_SEDE com filtro específico
+      centrosCustoParaFiltrar = [costCenter]
+    } else {
+      // SUPER_ADMIN ou OPERADOR_SEDE sem filtro (todos os centros)
+      centrosCustoParaFiltrar = []
     }
 
     console.log('🔍 Buscando dados do dashboard...')
@@ -67,13 +83,15 @@ export async function getDashboardSummaryFromAPI(filters?: DateFilter): Promise<
     console.log(`📊 Dados recebidos:`)
     console.log(`  - Pedidos: ${pedidos.length}`)
 
-    // Filtrar pedidos por centro de custo (se necessário)
+    // Filtrar pedidos
     let pedidosFiltrados = pedidos
-    if (costCenter && costCenter !== 'todos') {
+    if (centrosCustoParaFiltrar.length > 0) {
       pedidosFiltrados = pedidos.filter((pedido: any) =>
-        pedido.itensPedido?.some((item: any) => item.centroCusto === costCenter)
+        pedido.itensPedido?.some((item: any) =>
+          centrosCustoParaFiltrar.includes(item.centroCusto)
+        )
       )
-      console.log(`  - Pedidos após filtro por centro ${costCenter}: ${pedidosFiltrados.length}`)
+      console.log(`  - Pedidos após filtro por centros: ${pedidosFiltrados.length}`)
     }
 
     // Separar por tipo
@@ -140,9 +158,19 @@ export async function getDashboardSummaryFromAPI(filters?: DateFilter): Promise<
       .sort((a, b) => b.totalValue - a.totalValue)
       .slice(0, 10)
 
-    // CENTROS DE CUSTO DISPONÍVEIS (apenas para SUPER_ADMIN e OPERADOR_SEDE)
+    // CENTROS DE CUSTO DISPONÍVEIS PARA O FILTRO (apenas para exibição)
     let availableCostCenters: CostCenter[] = []
-    if (userRole !== 'CONSULTOR') {
+
+    if (userRole === 'CONSULTOR') {
+      // CONSULTOR vê APENAS os centros dele
+      availableCostCenters = userCentrosCusto.map(code => ({
+        code,
+        name: getCostCenterName(code),
+        totalValue: 0,
+        orderCount: 0
+      }))
+    } else {
+      // SUPER_ADMIN e OPERADOR_SEDE veem todos os centros
       const costCenterSet = new Set<string>()
       pedidos.forEach((pedido: any) => {
         pedido.itensPedido?.forEach((item: any) => {

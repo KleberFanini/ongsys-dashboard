@@ -6,13 +6,12 @@ import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
-// Estender os tipos do NextAuth
 declare module 'next-auth' {
     interface User {
         id: string
         role: string
         nome: string
-        centroCusto?: string | null
+        centrosCusto: string[]
     }
     interface Session {
         user: {
@@ -20,7 +19,7 @@ declare module 'next-auth' {
             email: string
             name: string
             role: string
-            centroCusto?: string | null
+            centrosCusto: string[]
         }
     }
 }
@@ -30,7 +29,7 @@ declare module 'next-auth/jwt' {
         id: string
         role: string
         nome: string
-        centroCusto?: string | null
+        centrosCusto: string[]
     }
 }
 
@@ -51,6 +50,16 @@ export const authOptions: NextAuthOptions = {
                     where: { email: credentials.email }
                 })
 
+                console.log('🔍 Usuario encontrado:', {
+                    email: usuario?.email,
+                    role: usuario?.role,
+                    centrosCusto: usuario?.centrosCusto,
+                    centrosCustoType: typeof usuario?.centrosCusto
+                })
+
+                const centrosCusto = usuario?.centrosCusto || []
+                console.log('🔍 centrosCusto após normalização:', centrosCusto)
+
                 if (!usuario) {
                     throw new Error('Usuário não encontrado')
                 }
@@ -70,7 +79,7 @@ export const authOptions: NextAuthOptions = {
                     email: usuario.email,
                     nome: usuario.nome,
                     role: usuario.role,
-                    centroCusto: usuario.centroCusto
+                    centrosCusto: usuario.centrosCusto || []
                 }
             }
         })
@@ -81,7 +90,7 @@ export const authOptions: NextAuthOptions = {
                 token.id = user.id
                 token.role = user.role
                 token.nome = user.nome
-                token.centroCusto = user.centroCusto || null
+                token.centrosCusto = user.centrosCusto || []
             }
             return token
         },
@@ -90,7 +99,7 @@ export const authOptions: NextAuthOptions = {
                 session.user.id = token.id as string
                 session.user.role = token.role as string
                 session.user.name = token.nome as string
-                session.user.centroCusto = token.centroCusto as string | null | undefined
+                session.user.centrosCusto = token.centrosCusto as string[]
             }
             return session
         }
