@@ -5,14 +5,34 @@ import { NextResponse } from 'next/server'
 export default withAuth(
     function middleware(req) {
         const token = req.nextauth.token
+        const path = req.nextUrl.pathname
+        const role = token?.role as string
 
-        // Ignorar durante desenvolvimento/hot reload
-        if (process.env.NODE_ENV === 'development' && req.nextUrl.pathname.includes('/_next')) {
+        // SUPER_ADMIN tem acesso a tudo
+        if (role === 'SUPER_ADMIN') {
             return NextResponse.next()
         }
 
-        // Apenas verificar se está autenticado
-        // As permissões específicas serão tratadas nas páginas individuais
+        // 🔥 ROTAS QUE CONSULTOR NÃO PODE ACESSAR
+        const rotasBloqueadasParaConsultor = [
+            '/fornecedores',
+            '/produtos',
+            '/admin',
+            '/configuracoes'
+        ]
+
+        // CONSULTOR não pode acessar rotas bloqueadas
+        if (role === 'CONSULTOR') {
+            if (rotasBloqueadasParaConsultor.some(rota => path.startsWith(rota))) {
+                return NextResponse.redirect(new URL('/dashboard', req.url))
+            }
+        }
+
+        // OPERADOR_SEDE não pode acessar /admin
+        if (role === 'OPERADOR_SEDE' && path.startsWith('/admin')) {
+            return NextResponse.redirect(new URL('/dashboard', req.url))
+        }
+
         return NextResponse.next()
     },
     {
@@ -32,7 +52,6 @@ export const config = {
         '/fornecedores/:path*',
         '/produtos/:path*',
         '/admin/:path*',
-        '/configuracoes/:path*',
-        '/teste-permissoes/:path*'
+        '/configuracoes/:path*'
     ]
 }

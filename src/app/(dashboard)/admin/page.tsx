@@ -42,7 +42,7 @@ interface Usuario {
     role: 'SUPER_ADMIN' | 'OPERADOR_SEDE' | 'CONSULTOR'
     ativo: boolean
     createdAt: string
-    centrosCusto?: string[]  // Alterado para array de strings
+    centrosCusto?: string[]
 }
 
 interface CentroCusto {
@@ -405,7 +405,7 @@ export default function AdminPage() {
                                                 setFormData({
                                                     ...formData,
                                                     role: value as Usuario['role'],
-                                                    centrosCusto: [] // Limpa ao mudar de role
+                                                    centrosCusto: []
                                                 })
                                             }}
                                         >
@@ -422,9 +422,9 @@ export default function AdminPage() {
 
                                     {/* Campos de Centro de Custo - aparece apenas para CONSULTOR */}
                                     {shouldShowCentrosCusto && (
-                                        <div className="space-y-3 border-l-4 border-blue-500 pl-4 py-3 bg-blue-50 dark:bg-blue-950/20 rounded-r-md">
+                                        <div className="space-y-3 border-l-4 border-blue-500 pl-4 py-3 bg-blue-50 dark:bg-blue-950/30 rounded-r-md">
                                             <div className="flex items-center gap-2">
-                                                <Building2 className="w-5 h-5 text-blue-600" />
+                                                <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                                                 <Label className="text-blue-700 dark:text-blue-300 font-semibold">
                                                     Centros de Custo Permitidos *
                                                 </Label>
@@ -448,20 +448,21 @@ export default function AdminPage() {
                                                     </Button>
                                                 </div>
                                             ) : (
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto p-2 border rounded-md bg-white dark:bg-gray-900">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto p-2 border rounded-md bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
                                                     {centrosCusto.map((centro) => (
                                                         <div key={centro.id} className="flex items-center space-x-3 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800">
                                                             <Checkbox
                                                                 id={`centro-${centro.id}`}
                                                                 checked={formData.centrosCusto.includes(centro.id)}
                                                                 onCheckedChange={() => handleCentroCustoToggle(centro.id)}
+                                                                className="border-gray-300 dark:border-gray-600"
                                                             />
                                                             <Label
                                                                 htmlFor={`centro-${centro.id}`}
-                                                                className="flex-1 cursor-pointer font-normal"
+                                                                className="flex-1 cursor-pointer font-normal dark:text-gray-100"
                                                             >
                                                                 <div className="font-mono text-sm">{centro.nome}</div>
-                                                                <div className="text-xs text-muted-foreground">{centro.descricao}</div>
+                                                                <div className="text-xs dark:text-gray-400">{centro.descricao}</div>
                                                             </Label>
                                                         </div>
                                                     ))}
@@ -470,14 +471,18 @@ export default function AdminPage() {
 
                                             {formData.centrosCusto.length > 0 && (
                                                 <div className="flex flex-wrap gap-2 mt-2">
-                                                    <span className="text-xs text-muted-foreground">Selecionados: </span>
+                                                    <span className="text-xs dark:text-gray-400">Selecionados: </span>
                                                     {formData.centrosCusto.map(cc => (
-                                                        <Badge key={cc} variant="secondary" className="text-xs">
+                                                        <Badge
+                                                            key={cc}
+                                                            variant="secondary"
+                                                            className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                                                        >
                                                             {cc}
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleCentroCustoToggle(cc)}
-                                                                className="ml-1 hover:text-red-500"
+                                                                className="ml-1 hover:text-red-500 dark:hover:text-red-400"
                                                             >
                                                                 ×
                                                             </button>
@@ -485,13 +490,13 @@ export default function AdminPage() {
                                                     ))}
                                                 </div>
                                             )}
-
-                                            {formData.centrosCusto.length === 0 && (
-                                                <p className="text-xs text-red-500">
-                                                    ⚠️ Selecione pelo menos um centro de custo
-                                                </p>
-                                            )}
                                         </div>
+                                    )}
+
+                                    {formData.centrosCusto.length === 0 && (
+                                        <p className="text-xs text-red-500">
+                                            ⚠️ Selecione pelo menos um centro de custo
+                                        </p>
                                     )}
                                 </div>
                                 <DialogFooter>
@@ -631,6 +636,6 @@ export default function AdminPage() {
                     </Table>
                 </CardContent>
             </Card>
-        </div>
+        </div >
     )
 }

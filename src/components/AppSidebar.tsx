@@ -1,3 +1,4 @@
+// src/components/AppSidebar.tsx
 'use client'
 
 import {
@@ -29,39 +30,55 @@ export function AppSidebar() {
     const { state } = useSidebar()
     const collapsed = state === "collapsed"
     const router = useRouter()
-    const { isSuperAdmin } = useAuth()
+    const { role } = useAuth()
 
+    // Menu base para todos os usuários
     const menuItems = [
         {
             title: "Dashboard",
             url: "/dashboard",
             icon: LayoutDashboard,
-        },
-        {
+        }
+    ]
+
+    // 🔥 SUPER_ADMIN e OPERADOR_SEDE veem Fornecedores e Produtos
+    const podeVerFornecedores = role === 'SUPER_ADMIN' || role === 'OPERADOR_SEDE'
+    const podeVerProdutos = role === 'SUPER_ADMIN' || role === 'OPERADOR_SEDE'
+    const podeVerAdmin = role === 'SUPER_ADMIN'
+
+    // Adicionar Fornecedores (apenas para quem pode)
+    if (podeVerFornecedores) {
+        menuItems.push({
             title: "Fornecedores",
             url: "/fornecedores",
             icon: Users,
-        },
-        {
+        })
+    }
+
+    // Adicionar Produtos (apenas para quem pode)
+    if (podeVerProdutos) {
+        menuItems.push({
             title: "Produtos",
             url: "/produtos",
             icon: Package2,
-        },
-        {
-            title: "Pedidos",
-            url: "/pedidos",
-            icon: Package,
-        },
-    ]
-
-    // Item Admin aparece apenas para SUPER_ADMIN
-    const adminItem = {
-        title: "Admin",
-        url: "/admin",
-        icon: Shield,
+        })
     }
 
-    const allMenuItems = isSuperAdmin ? [...menuItems, adminItem] : menuItems
+    // Pedidos - todos veem
+    menuItems.push({
+        title: "Pedidos",
+        url: "/pedidos",
+        icon: Package,
+    })
+
+    // Admin - apenas SUPER_ADMIN
+    if (podeVerAdmin) {
+        menuItems.push({
+            title: "Admin",
+            url: "/admin",
+            icon: Shield,
+        })
+    }
 
     return (
         <Sidebar collapsible="icon">
@@ -79,7 +96,7 @@ export function AppSidebar() {
                     </SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
-                            {allMenuItems.map((item) => (
+                            {menuItems.map((item) => (
                                 <SidebarMenuItem key={item.title}>
                                     <SidebarMenuButton asChild>
                                         <NavLink
