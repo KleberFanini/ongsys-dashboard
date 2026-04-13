@@ -1,11 +1,12 @@
 // src/lib/dashboard-queries.ts
 import {
   pedidosService,
-  produtosService,
   DateFilter
 } from './api/services'
 import { DashboardSummary, TopSupplier, TopItem, CostCenter, RecentAccount } from './dashboard-types'
 import { getCostCenterName } from './cost-centers-map'
+import { getServerSession } from 'next-auth'
+import { authOptions } from './auth/auth'
 
 // Função para extrair valor do pedido (soma dos itens)
 function extractValueFromPedido(pedido: any): number {
@@ -42,22 +43,29 @@ function extractValueFromPedido(pedido: any): number {
 
 export async function getDashboardSummaryFromAPI(filters?: DateFilter): Promise<DashboardSummary> {
   try {
-    const { startDate, endDate, costCenter } = filters || {}
+    // 🔥 OBTER SESSÃO DO SERVIDOR PARA VERIFICAR O USUÁRIO
+    const session = await getServerSession(authOptions)
+    const userRole = session?.user?.role
+    const userCentroCusto = session?.user?.centroCusto
 
-    console.log('🔍 Buscando dados do dashboard (apenas pedidos e produtos)...')
+    let { startDate, endDate, costCenter } = filters || {}
+
+    // 🔥 SE FOR CONSULTOR, FORÇAR O FILTRO PELO CENTRO DE CUSTO DELE
+    if (userRole === 'CONSULTOR' && userCentroCusto) {
+      costCenter = userCentroCusto
+      console.log(`🔒 Consultor filtrado por centro: ${userCentroCusto}`)
+    }
+
+    console.log('🔍 Buscando dados do dashboard...')
     const startTime = Date.now()
 
-    // 🔥 Buscar APENAS pedidos e produtos (removido contas e fornecedores)
-    const [pedidos, produtos] = await Promise.all([
-      pedidosService.listarTodos({ startDate, endDate }),
-      produtosService.listarTodos({ startDate, endDate })
-    ])
+    // Buscar APENAS pedidos
+    let pedidos = await pedidosService.listarTodos({ startDate, endDate })
 
     const totalTime = Date.now() - startTime
     console.log(`⏱️ Dados carregados em ${totalTime}ms`)
     console.log(`📊 Dados recebidos:`)
     console.log(`  - Pedidos: ${pedidos.length}`)
-    console.log(`  - Produtos: ${produtos.length}`)
 
     // Filtrar pedidos por centro de custo (se necessário)
     let pedidosFiltrados = pedidos
@@ -132,29 +140,20 @@ export async function getDashboardSummaryFromAPI(filters?: DateFilter): Promise<
       .sort((a, b) => b.totalValue - a.totalValue)
       .slice(0, 10)
 
-    // CENTROS DE CUSTO
-    const costCenterSet = new Set<string>()
-    pedidos.forEach((pedido: any) => {
-      pedido.itensPedido?.forEach((item: any) => {
-        if (item.centroCusto) costCenterSet.add(item.centroCusto)
+    // CENTROS DE CUSTO DISPONÍVEIS (apenas para SUPER_ADMIN e OPERADOR_SEDE)
+    let availableCostCenters: CostCenter[] = []
+    if (userRole !== 'CONSULTOR') {
+      const costCenterSet = new Set<string>()
+      pedidos.forEach((pedido: any) => {
+        pedido.itensPedido?.forEach((item: any) => {
+          if (item.centroCusto) costCenterSet.add(item.centroCusto)
+        })
       })
-    })
 
-    const availableCostCenters = Array.from(costCenterSet)
-      .map(code => ({ code, name: getCostCenterName(code), totalValue: 0, orderCount: 0 }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-
-    // UNIDADES DE MEDIDA
-    const unitMeasureMap = new Map<string, number>()
-    produtos.forEach((produto: any) => {
-      const unit = produto.unidadeMedida || 'Não informada'
-      unitMeasureMap.set(unit, (unitMeasureMap.get(unit) || 0) + 1)
-    })
-
-    const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316']
-    const unitMeasureData = Array.from(unitMeasureMap.entries())
-      .map(([name, value], index) => ({ name, value, fill: COLORS[index % COLORS.length] }))
-      .slice(0, 8)
+      availableCostCenters = Array.from(costCenterSet)
+        .map(code => ({ code, name: getCostCenterName(code), totalValue: 0, orderCount: 0 }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    }
 
     console.log('📊 RESUMO FINAL:')
     console.log(`  - Total Pedidos Produto: ${totalProductOrders}`)
@@ -176,7 +175,7 @@ export async function getDashboardSummaryFromAPI(filters?: DateFilter): Promise<
       topSuppliers,
       topItems,
       availableCostCenters,
-      unitMeasureData,
+      unitMeasureData: [],
       recentAccounts: []
     }
   } catch (error) {

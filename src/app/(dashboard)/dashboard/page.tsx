@@ -1,3 +1,4 @@
+// src/app/(dashboard)/dashboard/page.tsx
 'use client'
 
 import { useState, useEffect } from "react"
@@ -12,9 +13,6 @@ import {
     Building2,
     AlertCircle
 } from "lucide-react"
-import {
-    ResponsiveContainer, PieChart, Pie, Cell, Tooltip
-} from "recharts"
 import { StatCard } from "@/src/components/StatCard"
 import { Skeleton } from "@/src/components/ui/skeleton"
 import { Badge } from "@/src/components/ui/badge"
@@ -35,7 +33,6 @@ export default function DashboardPage() {
     const [data, setData] = useState<DashboardSummary | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [isDarkMode, setIsDarkMode] = useState(false)
     const [partialData, setPartialData] = useState(false)
 
     // Estados para filtros
@@ -44,33 +41,6 @@ export default function DashboardPage() {
     const [selectedCostCenter, setSelectedCostCenter] = useState('todos')
     const [availableCostCenters, setAvailableCostCenters] = useState<CostCenter[]>([])
     const [showDateFilter, setShowDateFilter] = useState(false)
-
-    const getUnitColor = (unit: string): string => {
-        const colors: Record<string, string> = {
-            'Unidade': '#3b82f6',
-            'Caixas': '#10b981',
-            'Pacote': '#f59e0b',
-            'Kg': '#ef4444',
-            'Metro': '#8b5cf6',
-            'Litro': '#ec4899',
-            'Par': '#06b6d4',
-            'Dúzia': '#f97316'
-        }
-        return colors[unit] || '#64748b'
-    }
-
-    // Detectar o tema atual
-    useEffect(() => {
-        const checkTheme = () => {
-            const isDark = document.documentElement.classList.contains('dark')
-            setIsDarkMode(isDark)
-        }
-
-        checkTheme()
-        const observer = new MutationObserver(checkTheme)
-        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-        return () => observer.disconnect()
-    }, [])
 
     // Função para buscar dados com filtros
     const fetchData = async () => {
@@ -88,7 +58,6 @@ export default function DashboardPage() {
                 params.append('costCenter', selectedCostCenter)
             }
 
-            // 🔥 AUMENTAR TIMEOUT para 10 MINUTOS (600000 ms)
             const controller = new AbortController()
             const timeoutId = setTimeout(() => controller.abort(), 600000)
 
@@ -189,7 +158,6 @@ export default function DashboardPage() {
                     <Skeleton className="h-96 rounded-xl" />
                     <Skeleton className="h-96 rounded-xl" />
                 </div>
-                <Skeleton className="h-64 rounded-xl" />
             </div>
         )
     }
@@ -398,61 +366,6 @@ export default function DashboardPage() {
                     </div>
                 </motion.div>
             </div>
-
-            {/* Gráfico de Unidades */}
-            {data.unitMeasureData.length > 0 && (
-                <motion.div
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4 }}
-                    className="bg-card rounded-xl border p-5"
-                >
-                    <h3 className="font-semibold text-card-foreground mb-4">Produtos por Unidade de Medida</h3>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="lg:col-span-1">
-                            <ResponsiveContainer width="100%" height={200}>
-                                <PieChart>
-                                    <Pie
-                                        data={data.unitMeasureData}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={50}
-                                        outerRadius={80}
-                                        dataKey="value"
-                                        label={(entry) => entry.value > 0 ? entry.value : ''}
-                                    >
-                                        {data.unitMeasureData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={getUnitColor(entry.name)} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip
-                                        contentStyle={{
-                                            backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
-                                            border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
-                                            borderRadius: '8px',
-                                            fontSize: '12px',
-                                        }}
-                                        formatter={(value: any) => [`${value} produtos`, 'Quantidade']}
-                                    />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-                        <div className="lg:col-span-2">
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                {data.unitMeasureData.map((item) => (
-                                    <div key={item.name} className="flex items-center gap-2">
-                                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.fill }} />
-                                        <div>
-                                            <p className="text-xs font-medium">{item.name}</p>
-                                            <p className="text-xs text-muted-foreground">{item.value} produtos</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </motion.div>
-            )}
         </div>
     )
 }

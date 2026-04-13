@@ -1,4 +1,3 @@
-// src/hooks/useAuth.ts
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef } from 'react'
@@ -28,6 +27,7 @@ export function useAuth(requiredRole?: Role) {
     }, [session, status, router, requiredRole])
 
     const role = session?.user?.role as Role | undefined
+    const centroCusto = session?.user?.centroCusto as string | undefined
 
     return {
         session,
@@ -35,6 +35,7 @@ export function useAuth(requiredRole?: Role) {
         isAuthenticated: !!session,
         user: session?.user,
         role,
+        centroCusto,
         isSuperAdmin: role === 'SUPER_ADMIN',
         isOperador: role === 'OPERADOR_SEDE',
         isConsultor: role === 'CONSULTOR'

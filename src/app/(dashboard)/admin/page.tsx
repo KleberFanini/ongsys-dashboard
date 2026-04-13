@@ -1,4 +1,3 @@
-// src/app/(dashboard)/admin/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -8,6 +7,7 @@ import { Badge } from '@/src/components/ui/badge'
 import { Button } from '@/src/components/ui/button'
 import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
+import { Checkbox } from '@/src/components/ui/checkbox'
 import {
     Table,
     TableBody,
@@ -32,7 +32,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/src/components/ui/select'
-import { Users, Shield, UserPlus, Edit, Trash2, RefreshCw } from 'lucide-react'
+import { Users, Shield, UserPlus, Edit, Trash2, RefreshCw, Building2 } from 'lucide-react'
 import { Skeleton } from '@/src/components/ui/skeleton'
 
 interface Usuario {
@@ -42,11 +42,19 @@ interface Usuario {
     role: 'SUPER_ADMIN' | 'OPERADOR_SEDE' | 'CONSULTOR'
     ativo: boolean
     createdAt: string
+    centrosCusto?: string[]  // Alterado para array de strings
+}
+
+interface CentroCusto {
+    id: string
+    nome: string
+    descricao: string
 }
 
 export default function AdminPage() {
     const { isSuperAdmin, isLoading: authLoading } = useAuth('SUPER_ADMIN')
     const [usuarios, setUsuarios] = useState<Usuario[]>([])
+    const [centrosCusto, setCentrosCusto] = useState<CentroCusto[]>([])
     const [loading, setLoading] = useState(true)
     const [dialogOpen, setDialogOpen] = useState(false)
     const [editingUser, setEditingUser] = useState<Usuario | null>(null)
@@ -54,14 +62,85 @@ export default function AdminPage() {
         nome: '',
         email: '',
         senha: '',
-        role: 'CONSULTOR' as Usuario['role']
+        role: 'CONSULTOR' as Usuario['role'],
+        centrosCusto: [] as string[]  // Array para múltiplos centros de custo
     })
 
-    // Buscar usuários (simulado - você precisa criar o endpoint)
+    // Buscar centros de custo dos pedidos
+    const fetchCentrosCusto = async () => {
+        try {
+            // Tenta buscar do endpoint específico
+            const response = await fetch('/api/admin/centros-custo', {
+                // Cache por 1 hora para não sobrecarregar
+                next: { revalidate: 3600 }
+            })
+
+            if (response.ok) {
+                const data = await response.json()
+                if (data && data.length > 0) {
+                    setCentrosCusto(data)
+                    return
+                }
+            }
+
+            // Fallback: busca do endpoint de pedidos com timeout
+            const controller = new AbortController()
+            const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 segundos timeout
+
+            try {
+                const pedidosResponse = await fetch('/api/pedidos?limit=500', {
+                    signal: controller.signal
+                })
+                clearTimeout(timeoutId)
+
+                if (pedidosResponse.ok) {
+                    const data = await pedidosResponse.json()
+                    const pedidos = Array.isArray(data) ? data : data.pedidos || []
+
+                    const centrosCustoSet = new Set<string>()
+
+                    pedidos.forEach((pedido: any) => {
+                        pedido.itensPedido?.forEach((item: any) => {
+                            if (item.centroCusto && item.centroCusto.trim()) {
+                                centrosCustoSet.add(item.centroCusto)
+                            }
+                        })
+                    })
+
+                    const centrosCustoList = Array.from(centrosCustoSet).sort().map(cc => ({
+                        id: cc,
+                        nome: cc,
+                        descricao: `Centro de Custo ${cc}`
+                    }))
+
+                    setCentrosCusto(centrosCustoList)
+                } else {
+                    // Dados mock para fallback
+                    setCentrosCusto([
+                        { id: '3.01.01.002', nome: '3.01.01.002', descricao: 'Centro de Custo - Alimentação' },
+                        { id: '3.01.02.001', nome: '3.01.02.001', descricao: 'Centro de Custo - Transporte' },
+                        { id: '3.01.03.005', nome: '3.01.03.005', descricao: 'Centro de Custo - Material Escolar' },
+                    ])
+                }
+            } catch (fetchError) {
+                clearTimeout(timeoutId)
+                console.error('Timeout ou erro no fetch:', fetchError)
+                // Dados mock em caso de erro
+                setCentrosCusto([
+                    { id: '3.01.01.002', nome: '3.01.01.002', descricao: 'Centro de Custo - Alimentação' },
+                    { id: '3.01.02.001', nome: '3.01.02.001', descricao: 'Centro de Custo - Transporte' },
+                ])
+            }
+        } catch (error) {
+            console.error('Erro ao buscar centros de custo:', error)
+            setCentrosCusto([])
+        }
+    }
+
+    // Buscar usuários
     const fetchUsuarios = async () => {
         setLoading(true)
         try {
-            // TODO: Criar endpoint /api/admin/usuarios
             const response = await fetch('/api/admin/usuarios')
             if (response.ok) {
                 const data = await response.json()
@@ -75,7 +154,8 @@ export default function AdminPage() {
                         nome: 'Administrador',
                         role: 'SUPER_ADMIN',
                         ativo: true,
-                        createdAt: new Date().toISOString()
+                        createdAt: new Date().toISOString(),
+                        centrosCusto: []
                     },
                     {
                         id: '2',
@@ -83,7 +163,8 @@ export default function AdminPage() {
                         nome: 'Operador Teste',
                         role: 'OPERADOR_SEDE',
                         ativo: true,
-                        createdAt: new Date().toISOString()
+                        createdAt: new Date().toISOString(),
+                        centrosCusto: []
                     },
                     {
                         id: '3',
@@ -91,7 +172,8 @@ export default function AdminPage() {
                         nome: 'Consultor Teste',
                         role: 'CONSULTOR',
                         ativo: true,
-                        createdAt: new Date().toISOString()
+                        createdAt: new Date().toISOString(),
+                        centrosCusto: ['3.01.01.002', '3.01.02.001']
                     }
                 ])
             }
@@ -105,31 +187,72 @@ export default function AdminPage() {
     useEffect(() => {
         if (isSuperAdmin) {
             fetchUsuarios()
+            fetchCentrosCusto()
         }
     }, [isSuperAdmin])
 
+    // Verificar se deve mostrar o campo centros de custo
+    const shouldShowCentrosCusto = formData.role === 'CONSULTOR'
+
+    // Gerenciar seleção de centros de custo
+    const handleCentroCustoToggle = (centroId: string) => {
+        setFormData(prev => {
+            const isSelected = prev.centrosCusto.includes(centroId)
+            if (isSelected) {
+                return {
+                    ...prev,
+                    centrosCusto: prev.centrosCusto.filter(id => id !== centroId)
+                }
+            } else {
+                return {
+                    ...prev,
+                    centrosCusto: [...prev.centrosCusto, centroId]
+                }
+            }
+        })
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+
+        // Validação: consultor precisa de pelo menos um centro de custo
+        if (formData.role === 'CONSULTOR' && formData.centrosCusto.length === 0) {
+            alert('Para usuários CONSULTOR, pelo menos um Centro de Custo é obrigatório!')
+            return
+        }
+
         try {
             const url = editingUser
                 ? `/api/admin/usuarios/${editingUser.id}`
                 : '/api/admin/usuarios'
             const method = editingUser ? 'PUT' : 'POST'
 
+            const dataToSend = {
+                nome: formData.nome,
+                email: formData.email,
+                role: formData.role,
+                ...(formData.senha && { senha: formData.senha }),
+                ...(formData.role === 'CONSULTOR' && { centrosCusto: formData.centrosCusto })
+            }
+
             const response = await fetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
+                body: JSON.stringify(dataToSend)
             })
 
             if (response.ok) {
                 fetchUsuarios()
                 setDialogOpen(false)
                 setEditingUser(null)
-                setFormData({ nome: '', email: '', senha: '', role: 'CONSULTOR' })
+                setFormData({ nome: '', email: '', senha: '', role: 'CONSULTOR', centrosCusto: [] })
+            } else {
+                const error = await response.json()
+                alert(error.message || 'Erro ao salvar usuário')
             }
         } catch (error) {
             console.error('Erro ao salvar usuário:', error)
+            alert('Erro ao salvar usuário')
         }
     }
 
@@ -154,7 +277,8 @@ export default function AdminPage() {
             nome: usuario.nome,
             email: usuario.email,
             senha: '',
-            role: usuario.role
+            role: usuario.role,
+            centrosCusto: usuario.centrosCusto || []
         })
         setDialogOpen(true)
     }
@@ -223,13 +347,13 @@ export default function AdminPage() {
                         <DialogTrigger asChild>
                             <Button onClick={() => {
                                 setEditingUser(null)
-                                setFormData({ nome: '', email: '', senha: '', role: 'CONSULTOR' })
+                                setFormData({ nome: '', email: '', senha: '', role: 'CONSULTOR', centrosCusto: [] })
                             }}>
                                 <UserPlus className="w-4 h-4 mr-2" />
                                 Novo Usuário
                             </Button>
                         </DialogTrigger>
-                        <DialogContent>
+                        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                             <DialogHeader>
                                 <DialogTitle>
                                     {editingUser ? 'Editar Usuário' : 'Novo Usuário'}
@@ -277,7 +401,13 @@ export default function AdminPage() {
                                         <Label htmlFor="role">Nível de Acesso</Label>
                                         <Select
                                             value={formData.role}
-                                            onValueChange={(value) => setFormData({ ...formData, role: value as Usuario['role'] })}
+                                            onValueChange={(value) => {
+                                                setFormData({
+                                                    ...formData,
+                                                    role: value as Usuario['role'],
+                                                    centrosCusto: [] // Limpa ao mudar de role
+                                                })
+                                            }}
                                         >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Selecione o nível" />
@@ -289,6 +419,80 @@ export default function AdminPage() {
                                             </SelectContent>
                                         </Select>
                                     </div>
+
+                                    {/* Campos de Centro de Custo - aparece apenas para CONSULTOR */}
+                                    {shouldShowCentrosCusto && (
+                                        <div className="space-y-3 border-l-4 border-blue-500 pl-4 py-3 bg-blue-50 dark:bg-blue-950/20 rounded-r-md">
+                                            <div className="flex items-center gap-2">
+                                                <Building2 className="w-5 h-5 text-blue-600" />
+                                                <Label className="text-blue-700 dark:text-blue-300 font-semibold">
+                                                    Centros de Custo Permitidos *
+                                                </Label>
+                                            </div>
+                                            <p className="text-sm text-blue-600 dark:text-blue-400">
+                                                Selecione um ou mais centros de custo que este consultor pode acessar
+                                            </p>
+
+                                            {centrosCusto.length === 0 ? (
+                                                <div className="text-center py-4 text-muted-foreground">
+                                                    <p>Carregando centros de custo...</p>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={fetchCentrosCusto}
+                                                        className="mt-2"
+                                                    >
+                                                        <RefreshCw className="w-3 h-3 mr-1" />
+                                                        Recarregar
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto p-2 border rounded-md bg-white dark:bg-gray-900">
+                                                    {centrosCusto.map((centro) => (
+                                                        <div key={centro.id} className="flex items-center space-x-3 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800">
+                                                            <Checkbox
+                                                                id={`centro-${centro.id}`}
+                                                                checked={formData.centrosCusto.includes(centro.id)}
+                                                                onCheckedChange={() => handleCentroCustoToggle(centro.id)}
+                                                            />
+                                                            <Label
+                                                                htmlFor={`centro-${centro.id}`}
+                                                                className="flex-1 cursor-pointer font-normal"
+                                                            >
+                                                                <div className="font-mono text-sm">{centro.nome}</div>
+                                                                <div className="text-xs text-muted-foreground">{centro.descricao}</div>
+                                                            </Label>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {formData.centrosCusto.length > 0 && (
+                                                <div className="flex flex-wrap gap-2 mt-2">
+                                                    <span className="text-xs text-muted-foreground">Selecionados: </span>
+                                                    {formData.centrosCusto.map(cc => (
+                                                        <Badge key={cc} variant="secondary" className="text-xs">
+                                                            {cc}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleCentroCustoToggle(cc)}
+                                                                className="ml-1 hover:text-red-500"
+                                                            >
+                                                                ×
+                                                            </button>
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {formData.centrosCusto.length === 0 && (
+                                                <p className="text-xs text-red-500">
+                                                    ⚠️ Selecione pelo menos um centro de custo
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                                 <DialogFooter>
                                     <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
@@ -357,6 +561,7 @@ export default function AdminPage() {
                                 <TableHead>Nome</TableHead>
                                 <TableHead>Email</TableHead>
                                 <TableHead>Nível</TableHead>
+                                <TableHead>Centros de Custo</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Data Cadastro</TableHead>
                                 <TableHead className="text-right">Ações</TableHead>
@@ -368,6 +573,23 @@ export default function AdminPage() {
                                     <TableCell className="font-medium">{usuario.nome}</TableCell>
                                     <TableCell>{usuario.email}</TableCell>
                                     <TableCell>{getRoleBadge(usuario.role)}</TableCell>
+                                    <TableCell>
+                                        {usuario.role === 'CONSULTOR' ? (
+                                            usuario.centrosCusto && usuario.centrosCusto.length > 0 ? (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {usuario.centrosCusto.map(cc => (
+                                                        <Badge key={cc} variant="outline" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs">
+                                                            {cc}
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <span className="text-red-500 text-sm">⚠️ Nenhum definido</span>
+                                            )
+                                        ) : (
+                                            <span className="text-muted-foreground text-sm">—</span>
+                                        )}
+                                    </TableCell>
                                     <TableCell>
                                         <Badge variant={usuario.ativo ? 'default' : 'destructive'}>
                                             {usuario.ativo ? 'Ativo' : 'Inativo'}
@@ -400,7 +622,7 @@ export default function AdminPage() {
                             ))}
                             {usuarios.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="text-center text-muted-foreground">
+                                    <TableCell colSpan={7} className="text-center text-muted-foreground">
                                         Nenhum usuário encontrado
                                     </TableCell>
                                 </TableRow>

@@ -1,21 +1,26 @@
+// src/lib/auth/auth.ts
 import { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
-import { prisma } from '@/src/lib/prisma'
+import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
-import { Role } from '@prisma/client'
 
+const prisma = new PrismaClient()
+
+// Estender os tipos do NextAuth
 declare module 'next-auth' {
     interface User {
         id: string
-        role: Role
+        role: string
         nome: string
+        centroCusto?: string | null
     }
     interface Session {
         user: {
             id: string
             email: string
             name: string
-            role: Role
+            role: string
+            centroCusto?: string | null
         }
     }
 }
@@ -23,8 +28,9 @@ declare module 'next-auth' {
 declare module 'next-auth/jwt' {
     interface JWT {
         id: string
-        role: Role
+        role: string
         nome: string
+        centroCusto?: string | null
     }
 }
 
@@ -62,8 +68,9 @@ export const authOptions: NextAuthOptions = {
                 return {
                     id: usuario.id,
                     email: usuario.email,
-                    name: usuario.nome,
-                    role: usuario.role
+                    nome: usuario.nome,
+                    role: usuario.role,
+                    centroCusto: usuario.centroCusto
                 }
             }
         })
@@ -73,15 +80,17 @@ export const authOptions: NextAuthOptions = {
             if (user) {
                 token.id = user.id
                 token.role = user.role
-                token.nome = user.name
+                token.nome = user.nome
+                token.centroCusto = user.centroCusto || null
             }
             return token
         },
         async session({ session, token }) {
             if (session.user) {
                 session.user.id = token.id as string
-                session.user.role = token.role as Role
+                session.user.role = token.role as string
                 session.user.name = token.nome as string
+                session.user.centroCusto = token.centroCusto as string | null | undefined
             }
             return session
         }
@@ -92,7 +101,7 @@ export const authOptions: NextAuthOptions = {
     },
     session: {
         strategy: 'jwt',
-        maxAge: 30 * 24 * 60 * 60 // 30 dias
+        maxAge: 30 * 24 * 60 * 60
     },
     secret: process.env.NEXTAUTH_SECRET
 }

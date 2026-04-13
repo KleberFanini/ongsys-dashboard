@@ -293,7 +293,6 @@ export const produtosService = {
                 return data
             }
 
-            // 🔥 CARREGAR EM LOTES - 3 páginas por vez
             const BATCH_SIZE = 3
             const data = [...(primeiraPagina.data || [])]
 
