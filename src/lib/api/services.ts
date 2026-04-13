@@ -18,6 +18,8 @@ function getDefaultDates() {
     }
 }
 
+const pendingRequests = new Map<string, Promise<any[]>>()
+
 export const pedidosService = {
     async listar(filters: DateFilter = {}, page = 1) {
         const params: ApiParams = { pageNumber: page }
@@ -26,54 +28,69 @@ export const pedidosService = {
         return apiGet('pedidos', params)
     },
 
-    async listarTodos(filters: DateFilter = {}) {
+    async listarTodos(filters: DateFilter = {}): Promise<any[]> {
         const cacheKey = `pedidos_${filters.startDate || ''}_${filters.endDate || ''}`
+
         const cached = getCached<any[]>(cacheKey)
         if (cached) return cached
 
-        console.log('🔄 Buscando todos os pedidos...')
-        const startTime = Date.now()
+        // Evitar requisições duplicadas simultâneas (race condition)
+        if (pendingRequests.has(cacheKey)) {
+            console.log('⏳ Aguardando requisição já em andamento...')
+            return pendingRequests.get(cacheKey)!
+        }
 
-        try {
-            // Buscar primeira página para saber total
-            const primeiraPagina = await this.listar(filters, 1)
-            const totalPages = Math.ceil((primeiraPagina.totalItems || 0) / 100)
-            console.log(`📊 Total de páginas: ${totalPages} (${primeiraPagina.totalItems} pedidos)`)
+        const promise = (async () => {
+            console.log('🔄 Buscando todos os pedidos...')
+            const startTime = Date.now()
 
-            if (totalPages <= 1) {
-                const data = primeiraPagina.data || []
-                setCached(cacheKey, data)
-                return data
-            }
+            try {
+                const primeiraPagina = await this.listar(filters, 1)
+                const totalPages = primeiraPagina.totalPages
+                const totalItems = primeiraPagina.totalItems
+                console.log(`📊 Total de páginas: ${totalPages} (${totalItems} pedidos)`)
 
-            // 🔥 CARREGAR EM LOTES (BATCH) - 3 páginas por vez
-            const BATCH_SIZE = 3
-            const data = [...(primeiraPagina.data || [])]
+                const data: any[] = [...(primeiraPagina.data || [])]
 
-            for (let batchStart = 2; batchStart <= totalPages; batchStart += BATCH_SIZE) {
-                const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, totalPages)
-                console.log(`📄 Buscando páginas ${batchStart}-${batchEnd} em paralelo...`)
+                if (totalPages > 1) {
+                    const BATCH_SIZE = 3
 
-                const promises = []
-                for (let p = batchStart; p <= batchEnd; p++) {
-                    promises.push(this.listar(filters, p))
+                    for (let batchStart = 2; batchStart <= totalPages; batchStart += BATCH_SIZE) {
+                        const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, totalPages)
+                        console.log(`📄 Buscando páginas ${batchStart}-${batchEnd}...`)
+
+                        const promises = Array.from(
+                            { length: batchEnd - batchStart + 1 },
+                            (_, i) => this.listar(filters, batchStart + i)
+                        )
+
+                        // allSettled: não descarta o lote inteiro se uma página falhar
+                        const resultados = await Promise.allSettled(promises)
+                        resultados.forEach((resultado, i) => {
+                            if (resultado.status === 'fulfilled') {
+                                data.push(...(resultado.value.data || []))
+                            } else {
+                                console.warn(`⚠️ Página ${batchStart + i} falhou definitivamente`)
+                            }
+                        })
+                    }
                 }
 
-                const resultados = await Promise.all(promises)
-                resultados.forEach(resultado => {
-                    data.push(...(resultado.data || []))
-                })
+                const duration = Date.now() - startTime
+                console.log(`✅ ${data.length} pedidos carregados em ${duration}ms`)
+
+                setCached(cacheKey, data)
+                return data
+            } catch (error) {
+                console.error('❌ Erro ao buscar pedidos:', error)
+                return []
+            } finally {
+                pendingRequests.delete(cacheKey)
             }
+        })()
 
-            const duration = Date.now() - startTime
-            console.log(`✅ ${data.length} pedidos carregados em ${duration}ms`)
-
-            setCached(cacheKey, data)
-            return data
-        } catch (error) {
-            console.error('❌ Erro ao buscar pedidos:', error)
-            return []
-        }
+        pendingRequests.set(cacheKey, promise)
+        return promise
     }
 }
 
