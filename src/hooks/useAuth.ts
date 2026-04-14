@@ -1,43 +1,81 @@
-import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
-import { useEffect, useRef } from 'react'
+// src/hooks/useAuth.ts
+'use client'
 
-export type Role = 'SUPER_ADMIN' | 'OPERADOR_SEDE' | 'CONSULTOR'
+import { useSession } from "next-auth/react"
+import { useEffect, useState } from "react"
 
-export function useAuth(requiredRole?: Role) {
-    const { data: session, status } = useSession()
-    const router = useRouter()
-    const hasRedirected = useRef(false)
+type Role = 'SUPER_ADMIN' | 'OPERADOR_SEDE' | 'CONSULTOR'
+
+interface User {
+    id: string
+    email: string
+    name: string
+    role: Role
+    centrosCusto: string[]
+}
+
+interface UseAuthReturn {
+    session: any
+    isLoading: boolean
+    isAuthenticated: boolean
+    user: User | undefined
+    role: Role | undefined
+    centroCusto: string | undefined
+    isSuperAdmin: boolean
+    isOperador: boolean
+    isConsultor: boolean
+    updateUser: (userData: Partial<User>) => Promise<void>
+    refreshSession: () => Promise<void>
+}
+
+export function useAuth(): UseAuthReturn {
+    const { data: session, update, status } = useSession()
+    const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => {
-        if (status === 'loading') return
-        if (hasRedirected.current) return
+        setIsLoading(status === 'loading')
+    }, [status])
 
-        if (!session) {
-            hasRedirected.current = true
-            router.push('/login')
-            return
+    const user = session?.user as User | undefined
+    const role = user?.role
+    const centroCusto = user?.centrosCusto?.[0]
+
+    const refreshSession = async () => {
+        try {
+            await update()
+            await new Promise(resolve => setTimeout(resolve, 100))
+        } catch (error) {
+            console.error('Erro ao refresh sessão:', error)
         }
+    }
 
-        if (requiredRole && session.user?.role !== requiredRole && session.user?.role !== 'SUPER_ADMIN') {
-            hasRedirected.current = true
-            router.push('/dashboard')
-            return
+    const updateUser = async (userData: Partial<User>) => {
+        try {
+            await update({
+                ...session,
+                user: {
+                    ...session?.user,
+                    ...userData
+                }
+            })
+            await new Promise(resolve => setTimeout(resolve, 100))
+        } catch (error) {
+            console.error('Erro ao atualizar sessão:', error)
+            throw error
         }
-    }, [session, status, router, requiredRole])
-
-    const role = session?.user?.role as Role | undefined
-    const centroCusto = session?.user?.centroCusto as string | undefined
+    }
 
     return {
         session,
-        isLoading: status === 'loading',
-        isAuthenticated: !!session,
-        user: session?.user,
+        isLoading,
+        isAuthenticated: !!session?.user,
+        user,
         role,
         centroCusto,
         isSuperAdmin: role === 'SUPER_ADMIN',
         isOperador: role === 'OPERADOR_SEDE',
-        isConsultor: role === 'CONSULTOR'
+        isConsultor: role === 'CONSULTOR',
+        updateUser,
+        refreshSession
     }
 }
