@@ -1,4 +1,3 @@
-// src/lib/dashboard-queries.ts
 import {
   pedidosService,
   DateFilter

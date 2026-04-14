@@ -246,7 +246,7 @@ export default function DashboardPage() {
                                 <option value="todos">Todos os centros</option>
                                 {availableCostCenters.map((cc) => (
                                     <option key={cc.code} value={cc.code}>
-                                        {cc.name}
+                                        {cc.name} ({cc.code})
                                     </option>
                                 ))}
                             </select>
