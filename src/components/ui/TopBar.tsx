@@ -207,21 +207,6 @@ export function TopBar({
                     </div>
 
                     <div className="flex items-center gap-2">
-                        {/* Botão de tema */}
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={toggleTheme}
-                            className="text-muted-foreground hover:text-foreground"
-                            aria-label="Alternar tema"
-                        >
-                            {isDarkMode ? (
-                                <Sun className="h-5 w-5" />
-                            ) : (
-                                <Moon className="h-5 w-5" />
-                            )}
-                        </Button>
-
                         {/* Notificações */}
                         {showNotifications && (
                             <Button
