@@ -52,7 +52,7 @@ interface CentroCusto {
 }
 
 export default function AdminPage() {
-    const { isSuperAdmin, isLoading: authLoading } = useAuth('SUPER_ADMIN')
+    const { isSuperAdmin, isLoading: authLoading } = useAuth()
     const [usuarios, setUsuarios] = useState<Usuario[]>([])
     const [centrosCusto, setCentrosCusto] = useState<CentroCusto[]>([])
     const [loading, setLoading] = useState(true)
