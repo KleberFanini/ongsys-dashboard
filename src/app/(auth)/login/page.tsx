@@ -1,4 +1,3 @@
-// src/app/login/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -45,8 +44,7 @@ export default function LoginPage() {
             const result = await signIn('credentials', {
                 email,
                 senha,
-                redirect: true,
-                callbackUrl: '/dashboard'
+                redirect: false,
             })
 
             if (result?.error) {
