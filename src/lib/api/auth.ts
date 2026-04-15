@@ -11,15 +11,17 @@ type Role = 'SUPER_ADMIN' | 'OPERADOR_SEDE' | 'CONSULTOR'
 declare module 'next-auth' {
     interface User {
         id: string
-        role: Role
+        role: string
         nome: string
+        centrosCusto: string[]
     }
     interface Session {
         user: {
             id: string
             email: string
             name: string
-            role: Role
+            role: string
+            centrosCusto: string[]
         }
     }
 }
@@ -27,8 +29,9 @@ declare module 'next-auth' {
 declare module 'next-auth/jwt' {
     interface JWT {
         id: string
-        role: Role
+        role: string
         nome: string
+        centrosCusto: string[]
     }
 }
 
@@ -63,15 +66,15 @@ export const authOptions: NextAuthOptions = {
                     throw new Error('Senha incorreta')
                 }
 
-                // Garantir que o role é do tipo correto
                 const role = usuario.role as Role
 
                 return {
                     id: usuario.id,
                     email: usuario.email,
                     name: usuario.nome,
-                    role: role,
-                    nome: usuario.nome
+                    role: usuario.role,
+                    nome: usuario.nome,
+                    centrosCusto: usuario.centrosCusto ?? []
                 }
             }
         })
@@ -82,14 +85,16 @@ export const authOptions: NextAuthOptions = {
                 token.id = user.id
                 token.role = user.role as Role
                 token.nome = user.nome
+                token.centrosCusto = user.centrosCusto ?? []
             }
             return token
         },
         async session({ session, token }) {
             if (session.user) {
-                session.user.id = token.id as string
-                session.user.role = token.role as Role
-                session.user.name = token.nome as string
+                session.user.id = token.id
+                session.user.role = token.role
+                session.user.name = token.nome
+                session.user.centrosCusto = token.centrosCusto ?? []
             }
             return session
         }
