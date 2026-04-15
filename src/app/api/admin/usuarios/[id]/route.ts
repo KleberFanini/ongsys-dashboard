@@ -5,11 +5,14 @@ import { authOptions } from '@/src/lib/auth/auth'
 import { prisma } from '@/src/lib/prisma'
 import bcrypt from 'bcryptjs'
 
+type RouteContext = { params: Promise<{ id: string }> }
+
 export async function PUT(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: RouteContext
 ) {
     try {
+        const { id } = await params
         const session = await getServerSession(authOptions)
 
         if (session?.user?.role !== 'SUPER_ADMIN') {
@@ -19,10 +22,15 @@ export async function PUT(
         const body = await request.json()
         const { email, nome, role, centrosCusto, ativo, senha } = body
 
-        const data: any = {
+        const data: {
+            email: string
+            nome: string
+            centrosCusto: string[]
+            ativo: boolean
+            senha?: string
+        } = {
             email,
             nome,
-            role,
             centrosCusto: centrosCusto || [],
             ativo,
         }
@@ -32,7 +40,7 @@ export async function PUT(
         }
 
         const usuario = await prisma.usuario.update({
-            where: { id: params.id },
+            where: { id },
             data,
             select: {
                 id: true,
@@ -54,31 +62,32 @@ export async function PUT(
 
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: RouteContext
 ) {
     try {
+        const { id } = await params
         const session = await getServerSession(authOptions)
 
         if (session?.user?.role !== 'SUPER_ADMIN') {
             return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
         }
 
-        // Verificar se não é o último admin
         const adminCount = await prisma.usuario.count({
             where: { role: 'SUPER_ADMIN' }
         })
 
         const usuario = await prisma.usuario.findUnique({
-            where: { id: params.id }
+            where: { id }
         })
 
         if (usuario?.role === 'SUPER_ADMIN' && adminCount <= 1) {
-            return NextResponse.json({ error: 'Não é possível excluir o único administrador' }, { status: 400 })
+            return NextResponse.json(
+                { error: 'Não é possível excluir o único administrador' },
+                { status: 400 }
+            )
         }
 
-        await prisma.usuario.delete({
-            where: { id: params.id }
-        })
+        await prisma.usuario.delete({ where: { id } })
 
         return NextResponse.json({ success: true })
     } catch (error) {
