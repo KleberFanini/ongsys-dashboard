@@ -44,11 +44,12 @@ import { formatCurrency } from "@/src/lib/utils"
 import { ETAPAS, agruparLogsPorEtapa, identificarEtapaAtual, type EtapaEstatistica } from "@/src/lib/order-types"
 import { useAuth } from "@/src/hooks/useAuth"
 import { getCostCenterName } from "@/src/lib/cost-centers-map"
+import { CACHE_TTL_MS } from '@/src/lib/api/cache-config'
 
 const PAGE_SIZE = 20
 const BATCH_SIZE = 3
 const CACHE_KEY = 'pedidos_completo_cache'
-const CACHE_DURATION = 10 * 60 * 1000
+const CACHE_DURATION = CACHE_TTL_MS
 
 interface Order {
     id: number

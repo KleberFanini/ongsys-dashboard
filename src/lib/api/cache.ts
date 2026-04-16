@@ -1,10 +1,12 @@
+import { CACHE_TTL_MS } from './cache-config'
+
 interface CacheItem {
     data: any
     timestamp: number
 }
 
 const cache = new Map<string, CacheItem>()
-const CACHE_TTL = 5 * 60 * 1000 // 5 minutos
+const CACHE_TTL = CACHE_TTL_MS
 
 export function getCached<T>(key: string): T | null {
     const item = cache.get(key)

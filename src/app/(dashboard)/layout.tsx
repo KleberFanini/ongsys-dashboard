@@ -8,6 +8,9 @@ import { useAuth } from '@/src/hooks/useAuth'
 import { Skeleton } from '@/src/components/ui/skeleton'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
+import { PedidosProvider } from '@/src/contexts/PedidosContext'
+import { ProdutosProvider } from '@/src/contexts/ProdutosContext'
+import { FornecedoresProvider } from '@/src/contexts/FornecedoresContext'
 
 export default function DashboardLayout({
     children,
@@ -40,17 +43,23 @@ export default function DashboardLayout({
 
     return (
         <SidebarProvider>
-            <div className="flex h-screen overflow-hidden">
-                <div className="h-full overflow-y-auto">
-                    <AppSidebar />
-                </div>
-                <div className="flex-1 flex flex-col overflow-hidden">
-                    <TopBar title="Dashboard" />
-                    <main className="flex-1 overflow-y-auto p-6 bg-background">
-                        {children}
-                    </main>
-                </div>
-            </div>
+            <PedidosProvider>
+                <ProdutosProvider>
+                    <FornecedoresProvider>
+                        <div className="flex h-screen overflow-hidden">
+                            <div className="h-full overflow-y-auto">
+                                <AppSidebar />
+                            </div>
+                            <div className="flex-1 flex flex-col overflow-hidden">
+                                <TopBar title="Dashboard" />
+                                <main className="flex-1 overflow-y-auto p-6 bg-background">
+                                    {children}
+                                </main>
+                            </div>
+                        </div>
+                    </FornecedoresProvider>
+                </ProdutosProvider>
+            </PedidosProvider>
         </SidebarProvider>
     )
 }
