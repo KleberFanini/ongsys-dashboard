@@ -153,7 +153,7 @@ export function TopBar({
         })
 
         return unsubscribe
-    }, [session, update, localUserName]) // 🔥 Adicionado localUserName
+    }, [session, update, localUserName])
 
     const toggleTheme = () => {
         const newDarkMode = !isDarkMode
@@ -169,7 +169,11 @@ export function TopBar({
     }
 
     const handleLogout = async () => {
-        await signOut({ redirect: true, callbackUrl: '/login' })
+        const baseUrl = window.location.origin
+        await signOut({
+            redirect: true,
+            callbackUrl: `${baseUrl}/login`
+        })
     }
 
     // Obter iniciais do nome do usuário para o avatar
