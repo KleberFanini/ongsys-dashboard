@@ -34,6 +34,7 @@ import {
 } from '@/src/components/ui/select'
 import { Users, Shield, UserPlus, Edit, Trash2, RefreshCw, Building2 } from 'lucide-react'
 import { Skeleton } from '@/src/components/ui/skeleton'
+import { costCentersList, getCostCenterName } from '@/src/lib/cost-centers-map'
 
 interface Usuario {
     id: string
@@ -45,16 +46,11 @@ interface Usuario {
     centrosCusto?: string[]
 }
 
-interface CentroCusto {
-    id: string
-    nome: string
-    descricao: string
-}
+// Não precisamos mais da interface CentroCusto pois vamos usar o costCentersList diretamente
 
 export default function AdminPage() {
     const { isSuperAdmin, isLoading: authLoading } = useAuth()
     const [usuarios, setUsuarios] = useState<Usuario[]>([])
-    const [centrosCusto, setCentrosCusto] = useState<CentroCusto[]>([])
     const [loading, setLoading] = useState(true)
     const [dialogOpen, setDialogOpen] = useState(false)
     const [editingUser, setEditingUser] = useState<Usuario | null>(null)
@@ -65,77 +61,6 @@ export default function AdminPage() {
         role: 'CONSULTOR' as Usuario['role'],
         centrosCusto: [] as string[]  // Array para múltiplos centros de custo
     })
-
-    // Buscar centros de custo dos pedidos
-    const fetchCentrosCusto = async () => {
-        try {
-            // Tenta buscar do endpoint específico
-            const response = await fetch('/api/admin/centros-custo', {
-                // Cache por 1 hora para não sobrecarregar
-                next: { revalidate: 3600 }
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                if (data && data.length > 0) {
-                    setCentrosCusto(data)
-                    return
-                }
-            }
-
-            // Fallback: busca do endpoint de pedidos com timeout
-            const controller = new AbortController()
-            const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 segundos timeout
-
-            try {
-                const pedidosResponse = await fetch('/api/pedidos?limit=500', {
-                    signal: controller.signal
-                })
-                clearTimeout(timeoutId)
-
-                if (pedidosResponse.ok) {
-                    const data = await pedidosResponse.json()
-                    const pedidos = Array.isArray(data) ? data : data.pedidos || []
-
-                    const centrosCustoSet = new Set<string>()
-
-                    pedidos.forEach((pedido: any) => {
-                        pedido.itensPedido?.forEach((item: any) => {
-                            if (item.centroCusto && item.centroCusto.trim()) {
-                                centrosCustoSet.add(item.centroCusto)
-                            }
-                        })
-                    })
-
-                    const centrosCustoList = Array.from(centrosCustoSet).sort().map(cc => ({
-                        id: cc,
-                        nome: cc,
-                        descricao: `Centro de Custo ${cc}`
-                    }))
-
-                    setCentrosCusto(centrosCustoList)
-                } else {
-                    // Dados mock para fallback
-                    setCentrosCusto([
-                        { id: '3.01.01.002', nome: '3.01.01.002', descricao: 'Centro de Custo - Alimentação' },
-                        { id: '3.01.02.001', nome: '3.01.02.001', descricao: 'Centro de Custo - Transporte' },
-                        { id: '3.01.03.005', nome: '3.01.03.005', descricao: 'Centro de Custo - Material Escolar' },
-                    ])
-                }
-            } catch (fetchError) {
-                clearTimeout(timeoutId)
-                console.error('Timeout ou erro no fetch:', fetchError)
-                // Dados mock em caso de erro
-                setCentrosCusto([
-                    { id: '3.01.01.002', nome: '3.01.01.002', descricao: 'Centro de Custo - Alimentação' },
-                    { id: '3.01.02.001', nome: '3.01.02.001', descricao: 'Centro de Custo - Transporte' },
-                ])
-            }
-        } catch (error) {
-            console.error('Erro ao buscar centros de custo:', error)
-            setCentrosCusto([])
-        }
-    }
 
     // Buscar usuários
     const fetchUsuarios = async () => {
@@ -187,7 +112,6 @@ export default function AdminPage() {
     useEffect(() => {
         if (isSuperAdmin) {
             fetchUsuarios()
-            fetchCentrosCusto()
         }
     }, [isSuperAdmin])
 
@@ -195,18 +119,18 @@ export default function AdminPage() {
     const shouldShowCentrosCusto = formData.role === 'CONSULTOR'
 
     // Gerenciar seleção de centros de custo
-    const handleCentroCustoToggle = (centroId: string) => {
+    const handleCentroCustoToggle = (centroCode: string) => {
         setFormData(prev => {
-            const isSelected = prev.centrosCusto.includes(centroId)
+            const isSelected = prev.centrosCusto.includes(centroCode)
             if (isSelected) {
                 return {
                     ...prev,
-                    centrosCusto: prev.centrosCusto.filter(id => id !== centroId)
+                    centrosCusto: prev.centrosCusto.filter(code => code !== centroCode)
                 }
             } else {
                 return {
                     ...prev,
-                    centrosCusto: [...prev.centrosCusto, centroId]
+                    centrosCusto: [...prev.centrosCusto, centroCode]
                 }
             }
         })
@@ -433,36 +357,26 @@ export default function AdminPage() {
                                                 Selecione um ou mais centros de custo que este consultor pode acessar
                                             </p>
 
-                                            {centrosCusto.length === 0 ? (
+                                            {costCentersList.length === 0 ? (
                                                 <div className="text-center py-4 text-muted-foreground">
-                                                    <p>Carregando centros de custo...</p>
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={fetchCentrosCusto}
-                                                        className="mt-2"
-                                                    >
-                                                        <RefreshCw className="w-3 h-3 mr-1" />
-                                                        Recarregar
-                                                    </Button>
+                                                    <p>Nenhum centro de custo disponível</p>
                                                 </div>
                                             ) : (
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto p-2 border rounded-md bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
-                                                    {centrosCusto.map((centro) => (
-                                                        <div key={centro.id} className="flex items-center space-x-3 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800">
+                                                    {costCentersList.map((centro) => (
+                                                        <div key={centro.code} className="flex items-center space-x-3 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800">
                                                             <Checkbox
-                                                                id={`centro-${centro.id}`}
-                                                                checked={formData.centrosCusto.includes(centro.id)}
-                                                                onCheckedChange={() => handleCentroCustoToggle(centro.id)}
+                                                                id={`centro-${centro.code}`}
+                                                                checked={formData.centrosCusto.includes(centro.code)}
+                                                                onCheckedChange={() => handleCentroCustoToggle(centro.code)}
                                                                 className="border-gray-300 dark:border-gray-600"
                                                             />
                                                             <Label
-                                                                htmlFor={`centro-${centro.id}`}
+                                                                htmlFor={`centro-${centro.code}`}
                                                                 className="flex-1 cursor-pointer font-normal dark:text-gray-100"
                                                             >
-                                                                <div className="font-mono text-sm">{centro.nome}</div>
-                                                                <div className="text-xs dark:text-gray-400">{centro.descricao}</div>
+                                                                <div className="font-mono text-sm">{centro.code}</div>
+                                                                <div className="text-xs dark:text-gray-400">{centro.name}</div>
                                                             </Label>
                                                         </div>
                                                     ))}
@@ -493,7 +407,7 @@ export default function AdminPage() {
                                         </div>
                                     )}
 
-                                    {formData.centrosCusto.length === 0 && (
+                                    {shouldShowCentrosCusto && formData.centrosCusto.length === 0 && (
                                         <p className="text-xs text-red-500">
                                             ⚠️ Selecione pelo menos um centro de custo
                                         </p>
@@ -636,6 +550,6 @@ export default function AdminPage() {
                     </Table>
                 </CardContent>
             </Card>
-        </div >
+        </div>
     )
 }
