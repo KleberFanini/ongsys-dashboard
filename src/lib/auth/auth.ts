@@ -32,6 +32,10 @@ declare module 'next-auth/jwt' {
     }
 }
 
+// 🔥 Detecta a URL base do ambiente
+const isProduction = process.env.NODE_ENV === 'production'
+const productionUrl = 'https://cdc-ezpoint-ongsys-dashboard.oxhwsy.easypanel.host'
+
 export const authOptions: NextAuthOptions = {
     providers: [
         CredentialsProvider({
@@ -111,5 +115,36 @@ export const authOptions: NextAuthOptions = {
         strategy: 'jwt',
         maxAge: 30 * 24 * 60 * 60
     },
-    secret: process.env.NEXTAUTH_SECRET
+    secret: process.env.NEXTAUTH_SECRET,
+    // 🔥 Configuração de cookies para produção
+    cookies: isProduction ? {
+        sessionToken: {
+            name: `__Secure-next-auth.session-token`,
+            options: {
+                httpOnly: true,
+                sameSite: 'lax',
+                path: '/',
+                secure: true,
+                domain: '.oxhwsy.easypanel.host' // Domínio principal
+            }
+        },
+        callbackUrl: {
+            name: `__Secure-next-auth.callback-url`,
+            options: {
+                sameSite: 'lax',
+                path: '/',
+                secure: true,
+                domain: '.oxhwsy.easypanel.host'
+            }
+        },
+        csrfToken: {
+            name: `__Host-next-auth.csrf-token`,
+            options: {
+                httpOnly: true,
+                sameSite: 'lax',
+                path: '/',
+                secure: true
+            }
+        },
+    } : undefined,
 }
