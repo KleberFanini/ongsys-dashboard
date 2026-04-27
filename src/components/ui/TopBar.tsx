@@ -169,11 +169,15 @@ export function TopBar({
     }
 
     const handleLogout = async () => {
-        const baseUrl = window.location.origin
-        await signOut({
-            redirect: true,
-            callbackUrl: `${baseUrl}/login`
-        })
+        try {
+            await signOut({
+                redirect: true,
+                callbackUrl: '/login'
+            })
+        } catch (error) {
+            console.error('Erro ao fazer logout:', error)
+            window.location.href = '/login'
+        }
     }
 
     // Obter iniciais do nome do usuário para o avatar
