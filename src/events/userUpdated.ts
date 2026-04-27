@@ -1,4 +1,3 @@
-// src/events/userUpdated.ts
 export const USER_UPDATED_EVENT = 'userUpdated'
 
 export interface UserUpdatedData {

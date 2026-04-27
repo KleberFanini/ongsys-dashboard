@@ -4,8 +4,6 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, Re
 import { CACHE_TTL_MS } from '@/src/lib/api/cache-config'
 import { useAuth } from '@/src/hooks/useAuth'
 
-const BATCH_SIZE = 3
-
 interface CacheData<T> {
     data: T[]
     timestamp: number
@@ -60,38 +58,22 @@ export function createDataContext<T>(options: CreateDataContextOptions) {
             setLoadError(null)
 
             try {
-                const primeiraRes = await fetch(`/api/${endpoint}?page=1`, { signal: controller.signal })
-                if (!primeiraRes.ok) throw new Error(`HTTP ${primeiraRes.status}`)
-                const primeiraData = await primeiraRes.json()
+                setLoadingProgress({ current: 0, total: 1 })
 
-                const totalPaginas = Math.ceil((primeiraData.total || 0) / 100)
-                let allData: T[] = [...(primeiraData.data || [])]
-                setLoadingProgress({ current: 1, total: totalPaginas })
+                const res = await fetch(`/api/${endpoint}/todos`, { signal: controller.signal })
+                if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
-                if (totalPaginas > 1) {
-                    const paginas = Array.from({ length: totalPaginas - 1 }, (_, i) => i + 2)
-                    for (let i = 0; i < paginas.length; i += BATCH_SIZE) {
-                        const batch = paginas.slice(i, i + BATCH_SIZE)
-                        const results = await Promise.all(
-                            batch.map(p =>
-                                fetch(`/api/${endpoint}?page=${p}`, { signal: controller.signal })
-                                    .then(r => r.json())
-                                    .catch(() => ({ data: [] }))
-                            )
-                        )
-                        results.forEach(r => allData.push(...(r.data || [])))
-                        setLoadingProgress({
-                            current: Math.min(i + BATCH_SIZE + 1, totalPaginas),
-                            total: totalPaginas
-                        })
-                    }
-                }
+                const json = await res.json()
+                const allData: T[] = json.data || []
 
                 setData(allData)
+                setLoadingProgress({ current: 1, total: 1 })
 
                 try {
-                    const cacheData: CacheData<T> = { data: allData, timestamp: Date.now() }
-                    localStorage.setItem(cacheKey, JSON.stringify(cacheData))
+                    localStorage.setItem(cacheKey, JSON.stringify({
+                        data: allData,
+                        timestamp: Date.now()
+                    } satisfies CacheData<T>))
                 } catch { }
 
             } catch (error: any) {
@@ -110,7 +92,13 @@ export function createDataContext<T>(options: CreateDataContextOptions) {
         }, [isAuthenticated, authLoading, load])
 
         return (
-            <Context.Provider value={{ data, loading, loadingProgress, loadError, reload: () => load(true) }}>
+            <Context.Provider value={{
+                data,
+                loading,
+                loadingProgress,
+                loadError,
+                reload: () => { hasLoadedRef.current = true; load(true) }
+            }}>
                 {children}
             </Context.Provider>
         )
@@ -118,7 +106,7 @@ export function createDataContext<T>(options: CreateDataContextOptions) {
 
     function useData() {
         const ctx = useContext(Context)
-        if (!ctx) throw new Error(`Hook deve ser usado dentro do Provider correspondente`)
+        if (!ctx) throw new Error(`useData deve ser usado dentro do Provider de ${cacheKey}`)
         return ctx
     }
 

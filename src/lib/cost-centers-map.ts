@@ -1,5 +1,10 @@
 // ongsys-dashboard/src/lib/cost-centers-map.ts
 export const costCentersMap: Record<string, string> = {
+    '1.01.01.001': 'INSTITUCIONAL',
+    '3.01.02.001': 'CAB ATITUDE II.I - CUSTO INDIRETOS',
+    '3.02.02.001': 'CAR ATITUDE II.I - CUSTO INDIRETOS',
+    '3.03.02.001': 'JAB ATITUDE II.I - CUSTO INDIRETOS',
+    '3.04.02.001': 'REC ATITUDE II.I - CUSTO INDIRETOS',
     '3.01.01.001': 'CAB ATITUDE II.I - DESPESAS DIRETAS - ANT',
     '3.01.01.002': 'CAB ATITUDE II.I - DESPESAS DIRETAS - BREVE',
     '3.01.01.003': 'CAB ATITUDE II.I - DESPESAS DIRETAS - INT',

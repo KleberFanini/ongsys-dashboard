@@ -1,6 +1,7 @@
+// src/app/(dashboard)/pedidos/page.tsx
 'use client'
 
-import { useState, useEffect, useMemo, useRef, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { motion } from "framer-motion"
 import {
     Search,
@@ -43,13 +44,10 @@ import {
 import { formatCurrency } from "@/src/lib/utils"
 import { ETAPAS, agruparLogsPorEtapa, identificarEtapaAtual, type EtapaEstatistica } from "@/src/lib/order-types"
 import { useAuth } from "@/src/hooks/useAuth"
+import { usePedidos } from "@/src/contexts/PedidosContext"
 import { getCostCenterName } from "@/src/lib/cost-centers-map"
-import { CACHE_TTL_MS } from '@/src/lib/api/cache-config'
 
 const PAGE_SIZE = 20
-const BATCH_SIZE = 3
-const CACHE_KEY = 'pedidos_completo_cache'
-const CACHE_DURATION = CACHE_TTL_MS
 
 interface Order {
     id: number
@@ -70,13 +68,6 @@ interface Order {
     justificativa_compra?: string
     fonte_pagadora?: string
     conta_plano_financeiro?: string
-}
-
-interface CacheData {
-    allOrders: Order[]
-    totalItems: number
-    totalPages: number
-    timestamp: number
 }
 
 const getStatusColor = (status: string): string => {
@@ -102,27 +93,10 @@ const getEtapaColor = (etapa: string): string => {
     return colors[etapa] || 'border-gray-500 text-gray-600 bg-gray-50 dark:bg-gray-950/30'
 }
 
-const getLogIcon = (acao: string) => {
-    if (!acao) return <Clock className="w-4 h-4 text-muted-foreground" />
-    const acaoLower = acao.toLowerCase()
-    if (acaoLower.includes('criou')) return <CheckCircle2 className="w-4 h-4 text-blue-500" />
-    if (acaoLower.includes('aprovou')) return <CheckCircle2 className="w-4 h-4 text-success" />
-    if (acaoLower.includes('enviou')) return <Clock className="w-4 h-4 text-warning" />
-    if (acaoLower.includes('cancel')) return <XCircle className="w-4 h-4 text-destructive" />
-    if (acaoLower.includes('finaliz')) return <CheckCircle2 className="w-4 h-4 text-success" />
-    if (acaoLower.includes('gerou')) return <AlertCircle className="w-4 h-4 text-blue-500" />
-    if (acaoLower.includes('marcou')) return <Clock className="w-4 h-4 text-warning" />
-    if (acaoLower.includes('encerrou')) return <CheckCircle2 className="w-4 h-4 text-success" />
-    if (acaoLower.includes('negado') || acaoLower.includes('recusado')) return <XCircle className="w-4 h-4 text-destructive" />
-    return <Clock className="w-4 h-4 text-muted-foreground" />
-}
-
 export default function PedidosPage() {
     const { isLoading: authLoading, isAuthenticated, user } = useAuth()
-    const [allOrders, setAllOrders] = useState<Order[]>([])
+    const { data: allOrdersRaw, loading, loadingProgress, loadError, reload } = usePedidos()
     const [filteredOrders, setFilteredOrders] = useState<Order[]>([])
-    const [loading, setLoading] = useState(true)
-    const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0 })
     const [search, setSearch] = useState("")
     const [status, setStatus] = useState("todos")
     const [tipo, setTipo] = useState("todos")
@@ -135,9 +109,6 @@ export default function PedidosPage() {
     const [exporting, setExporting] = useState(false)
     const [activeTab, setActiveTab] = useState("detalhes")
     const [timelineFilter, setTimelineFilter] = useState<'todos' | 'etapas'>('todos')
-    const abortControllerRef = useRef<AbortController | null>(null)
-    const [hasLoaded, setHasLoaded] = useState(false)
-    const [loadError, setLoadError] = useState<string | null>(null)
 
     // 🔥 PEGAR DADOS DO USUÁRIO DA SESSÃO
     const userRole = user?.role
@@ -156,106 +127,50 @@ export default function PedidosPage() {
     const pedidoPertenceAoConsultor = useCallback((pedido: Order): boolean => {
         if (userRole !== 'CONSULTOR') return true
         if (!userCentrosCusto.length) return false
-
         const centrosPedido = getPedidoCentrosCusto(pedido)
         return centrosPedido.some(centro => userCentrosCusto.includes(centro))
     }, [userRole, userCentrosCusto, getPedidoCentrosCusto])
 
-    // 🔥 FUNÇÃO PARA APLICAR FILTRO DE CENTRO DE CUSTO (MESMA LÓGICA DO DASHBOARD)
+    // 🔥 FUNÇÃO PARA APLICAR FILTRO DE CENTRO DE CUSTO
     const aplicarFiltroCentroCusto = useCallback((pedidos: Order[]): Order[] => {
-        // Se não for CONSULTOR, retorna todos (o filtro de centro será aplicado depois)
         if (userRole !== 'CONSULTOR') return pedidos
-
-        // CONSULTOR: filtra apenas pedidos dos seus centros de custo
         return pedidos.filter(pedido => pedidoPertenceAoConsultor(pedido))
     }, [userRole, pedidoPertenceAoConsultor])
 
     // 🔥 CALCULAR CENTROS DE CUSTO DISPONÍVEIS PARA O FILTRO
     const availableCostCenters = useMemo(() => {
         if (userRole === 'CONSULTOR') {
-            // CONSULTOR vê APENAS os centros dele
             return userCentrosCusto.map(code => ({
                 code,
                 name: getCostCenterName(code)
             }))
         }
 
-        // SUPER_ADMIN e OPERADOR_SEDE: extraem todos os centros dos pedidos
         const centrosSet = new Set<string>()
-        allOrders.forEach(pedido => {
+        allOrdersRaw.forEach((pedido: Order) => {
             getPedidoCentrosCusto(pedido).forEach(centro => centrosSet.add(centro))
         })
-
         return Array.from(centrosSet)
             .map(code => ({ code, name: getCostCenterName(code) }))
             .sort((a, b) => a.name.localeCompare(b.name))
-    }, [userRole, userCentrosCusto, allOrders, getPedidoCentrosCusto])
+    }, [userRole, userCentrosCusto, allOrdersRaw, getPedidoCentrosCusto])
 
-    // Calcular estatísticas de etapas baseado nos pedidos carregados
-    const etapasEstatisticas = useMemo(() => {
-        if (filteredOrders.length === 0) return []
-
-        const estatisticas: EtapaEstatistica[] = ETAPAS.map(etapa => ({
-            nome: etapa.nome,
-            descricao: etapa.descricao,
-            quantidade: 0,
-            ordem: etapa.ordem
-        }))
-
-        // Calcular estatísticas apenas dos pedidos já filtrados
-        filteredOrders.forEach(order => {
-            const etapaAtual = identificarEtapaAtual(order.logs || [])
-            if (etapaAtual) {
-                const etapaInfo = estatisticas.find(e => e.nome === etapaAtual)
-                if (etapaInfo) {
-                    etapaInfo.quantidade++
-                }
-            }
-        })
-
-        return estatisticas
-    }, [filteredOrders])
-
-    // Extrair status e tipos únicos (apenas dos pedidos permitidos)
-    const uniqueStatus = useMemo(() => {
-        const statusSet = new Set<string>()
-        const pedidosPermitidos = aplicarFiltroCentroCusto(allOrders)
-        pedidosPermitidos.forEach(order => {
-            if (order.status_pedido) statusSet.add(order.status_pedido)
-        })
-        return ['todos', ...Array.from(statusSet)]
-    }, [allOrders, aplicarFiltroCentroCusto])
-
-    const uniqueTipos = useMemo(() => {
-        const tipoSet = new Set<string>()
-        const pedidosPermitidos = aplicarFiltroCentroCusto(allOrders)
-        pedidosPermitidos.forEach(order => {
-            if (order.tipo_pedido) tipoSet.add(order.tipo_pedido)
-        })
-        return ['todos', ...Array.from(tipoSet)]
-    }, [allOrders, aplicarFiltroCentroCusto])
-
-    // 🔥 APLICAR TODOS OS FILTROS (incluindo centro de custo)
+    // 🔥 APLICAR TODOS OS FILTROS
     useEffect(() => {
-        if (allOrders.length === 0) return
+        if (allOrdersRaw.length === 0) return
 
-        // Começa com todos os pedidos
-        let filtered = [...allOrders]
-
-        // 🔥 1. APLICAR FILTRO DE CENTRO DE CUSTO (para CONSULTOR)
+        let filtered = [...allOrdersRaw]
         filtered = aplicarFiltroCentroCusto(filtered)
 
-        // 🔥 2. APLICAR FILTRO DE CENTRO DE CUSTO SELECIONADO (para todos os roles)
         if (centroCusto !== 'todos') {
-            filtered = filtered.filter(pedido =>
+            filtered = filtered.filter((pedido: Order) =>
                 getPedidoCentrosCusto(pedido).includes(centroCusto)
             )
         }
 
-        // 3. Aplicar outros filtros
         if (search) {
             const searchLower = search.toLowerCase()
-            filtered = filtered.filter(order =>
+            filtered = filtered.filter((order: Order) =>
                 order.titulo?.toLowerCase().includes(searchLower) ||
                 order.id_requisicao?.toLowerCase().includes(searchLower) ||
                 order.fornecedor_nome?.toLowerCase().includes(searchLower)
@@ -263,15 +178,15 @@ export default function PedidosPage() {
         }
 
         if (status !== 'todos') {
-            filtered = filtered.filter(order => order.status_pedido === status)
+            filtered = filtered.filter((order: Order) => order.status_pedido === status)
         }
 
         if (tipo !== 'todos') {
-            filtered = filtered.filter(order => order.tipo_pedido === tipo)
+            filtered = filtered.filter((order: Order) => order.tipo_pedido === tipo)
         }
 
         if (etapa !== 'Todas') {
-            filtered = filtered.filter(order => {
+            filtered = filtered.filter((order: Order) => {
                 const etapaAtual = identificarEtapaAtual(order.logs || [])
                 return etapaAtual === etapa
             })
@@ -281,181 +196,56 @@ export default function PedidosPage() {
         setTotalItems(filtered.length)
         setTotalPages(Math.ceil(filtered.length / PAGE_SIZE))
         setPage(1)
-    }, [allOrders, search, status, tipo, etapa, centroCusto, aplicarFiltroCentroCusto, getPedidoCentrosCusto])
-
-    // Carregar todas as páginas em lotes (MESMA LÓGICA, MAS AGORA APENAS PEDIDOS PERMITIDOS SÃO ARMAZENADOS)
-    const loadAllPages = useCallback(async () => {
-        console.log('🔵 [1] loadAllPages iniciado')
-
-        // Verificar cache primeiro
-        try {
-            console.log('🔵 [2] Verificando cache...')
-            const cached = localStorage.getItem(CACHE_KEY)
-            if (cached) {
-                const data: CacheData = JSON.parse(cached)
-                if (Date.now() - data.timestamp < CACHE_DURATION) {
-                    console.log('📦 Usando cache com', data.allOrders.length, 'pedidos')
-
-                    // 🔥 APLICAR FILTRO DE CONSULTOR APÓS CARREGAR DO CACHE
-                    const pedidosPermitidos = aplicarFiltroCentroCusto(data.allOrders)
-                    setAllOrders(pedidosPermitidos)
-                    setTotalItems(pedidosPermitidos.length)
-                    setTotalPages(Math.ceil(pedidosPermitidos.length / PAGE_SIZE))
-                    setLoading(false)
-                    setHasLoaded(true)
-                    return
-                }
-            } else {
-                console.log('⚠️ Cache inválido (vazio ou expirado), buscando novos dados...')
-                localStorage.removeItem(CACHE_KEY)
-            }
-        } catch (e) {
-            console.warn('Erro ao ler cache:', e)
-        }
-
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort()
-        }
-
-        const controller = new AbortController()
-        abortControllerRef.current = controller
-
-        setLoading(true)
-        setHasLoaded(false)
-        setLoadError(null)
-
-        try {
-            console.log('🔵 [3] Buscando primeira página...')
-            const primeiraRes = await fetch('/api/pedidos?page=1', { signal: controller.signal })
-            console.log('🔵 [4] Resposta status:', primeiraRes.status)
-
-            if (!primeiraRes.ok) {
-                throw new Error(`HTTP ${primeiraRes.status}: ${primeiraRes.statusText}`)
-            }
-
-            const primeiraData = await primeiraRes.json()
-            console.log('🔵 [5] Dados:', { total: primeiraData.total, dataLength: primeiraData.data?.length })
-
-            const totalPedidos = primeiraData.total || 0
-            const totalPaginas = Math.ceil(totalPedidos / 100)
-
-            console.log(`📊 Total de pedidos: ${totalPedidos} (${totalPaginas} páginas)`)
-
-            const pedidosComValor = (primeiraData.data || []).map((order: any) => ({
-                ...order,
-                valor_total: order.valorTotal || 0
-            }))
-
-            let allData = [...pedidosComValor]
-            setLoadingProgress({ current: 1, total: totalPaginas })
-
-            if (totalPaginas > 1) {
-                console.log('🔵 [6] Carregando páginas restantes...')
-                const paginasRestantes = []
-                for (let p = 2; p <= totalPaginas; p++) {
-                    paginasRestantes.push(p)
-                }
-
-                for (let i = 0; i < paginasRestantes.length; i += BATCH_SIZE) {
-                    const batch = paginasRestantes.slice(i, i + BATCH_SIZE)
-                    console.log(`📄 Carregando lote ${Math.floor(i / BATCH_SIZE) + 1}: páginas ${batch.join(', ')}`)
-
-                    const promises = batch.map(p =>
-                        fetch(`/api/pedidos?page=${p}`, { signal: controller.signal })
-                            .then(res => res.json())
-                            .catch(err => ({ error: err, page: p }))
-                    )
-
-                    const results = await Promise.all(promises)
-                    console.log('🔵 [7] Lote carregado')
-
-                    results.forEach((result, idx) => {
-                        if (result.error) {
-                            console.warn(`⚠️ Erro na página ${batch[idx]}:`, result.error)
-                        } else if (result.data) {
-                            const pedidos = (result.data || []).map((order: any) => ({
-                                ...order,
-                                valor_total: order.valorTotal || 0
-                            }))
-                            allData.push(...pedidos)
-                        }
-                    })
-
-                    setLoadingProgress({ current: Math.min(i + BATCH_SIZE + 1, totalPaginas), total: totalPaginas })
-
-                    if (i + BATCH_SIZE < paginasRestantes.length) {
-                        await new Promise(resolve => setTimeout(resolve, 500))
-                    }
-                }
-            }
-
-            console.log(`🔵 [8] ✅ ${allData.length} pedidos carregados`)
-
-            // 🔥 APLICAR FILTRO DE CONSULTOR ANTES DE ARMAZENAR
-            const pedidosPermitidos = aplicarFiltroCentroCusto(allData)
-            console.log(`🔒 Após filtro de CONSULTOR: ${pedidosPermitidos.length} pedidos`)
-
-            setAllOrders(pedidosPermitidos)
-            setTotalItems(pedidosPermitidos.length)
-            setTotalPages(Math.ceil(pedidosPermitidos.length / PAGE_SIZE))
-
-            try {
-                const cacheData: CacheData = {
-                    allOrders: allData, // Cache guarda todos (sem filtro) para não perder dados
-                    totalItems: totalPedidos,
-                    totalPages: Math.ceil(totalPedidos / PAGE_SIZE),
-                    timestamp: Date.now()
-                }
-                localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
-            } catch (e) {
-                console.warn('Erro ao salvar cache:', e)
-            }
-
-        } catch (error: any) {
-            console.error('🔵 [ERRO]', error)
-            setLoadError(error.message)
-            setAllOrders([])
-            setTotalItems(0)
-            setTotalPages(1)
-        } finally {
-            setLoading(false)
-            setHasLoaded(true)
-            setLoadingProgress({ current: 0, total: 0 })
-        }
-    }, [aplicarFiltroCentroCusto])
-
-    // Carregar dados apenas quando autenticado e não carregou ainda
-    const hasLoadedRef = useRef(false);
+    }, [allOrdersRaw, search, status, tipo, etapa, centroCusto, aplicarFiltroCentroCusto, getPedidoCentrosCusto])
 
     useEffect(() => {
-        let isMounted = true;
-
-        if (hasLoadedRef.current) return;
-
-        console.log('🔄 useEffect executado:', {
-            isAuthenticated,
-            hasLoaded,
-            authLoading,
-            userRole,
-            shouldLoad: isAuthenticated && !hasLoaded && !authLoading && isMounted
+        console.log('📊 [PedidosPage] Estado atual:', {
+            dataLength: allOrdersRaw.length,
+            loading,
+            loadError,
+            hasData: allOrdersRaw.length > 0
         })
+    }, [allOrdersRaw, loading, loadError])
 
-        if (isAuthenticated && !hasLoaded && !authLoading && isMounted) {
-            console.log('🚀 Chamando loadAllPages...')
-            hasLoadedRef.current = true;
-            loadAllPages()
-        }
+    // Estatísticas de etapas
+    const etapasEstatisticas = useMemo(() => {
+        if (filteredOrders.length === 0) return []
+        const estatisticas: EtapaEstatistica[] = ETAPAS.map(etapa => ({
+            nome: etapa.nome,
+            descricao: etapa.descricao,
+            quantidade: 0,
+            ordem: etapa.ordem
+        }))
+        filteredOrders.forEach((order: Order) => {
+            const etapaAtual = identificarEtapaAtual(order.logs || [])
+            if (etapaAtual) {
+                const etapaInfo = estatisticas.find(e => e.nome === etapaAtual)
+                if (etapaInfo) etapaInfo.quantidade++
+            }
+        })
+        return estatisticas
+    }, [filteredOrders])
 
-        return () => {
-            isMounted = false;
-        }
-    }, [isAuthenticated, hasLoaded, authLoading, loadAllPages, userRole])
+    // Status e tipos únicos
+    const uniqueStatus = useMemo(() => {
+        const statusSet = new Set<string>()
+        const pedidosPermitidos = aplicarFiltroCentroCusto(allOrdersRaw)
+        pedidosPermitidos.forEach((order: Order) => {
+            if (order.status_pedido) statusSet.add(order.status_pedido)
+        })
+        return ['todos', ...Array.from(statusSet)]
+    }, [allOrdersRaw, aplicarFiltroCentroCusto])
 
-    // Paginação local
-    const paginatedOrders = filteredOrders.slice(
-        (page - 1) * PAGE_SIZE,
-        page * PAGE_SIZE
-    )
+    const uniqueTipos = useMemo(() => {
+        const tipoSet = new Set<string>()
+        const pedidosPermitidos = aplicarFiltroCentroCusto(allOrdersRaw)
+        pedidosPermitidos.forEach((order: Order) => {
+            if (order.tipo_pedido) tipoSet.add(order.tipo_pedido)
+        })
+        return ['todos', ...Array.from(tipoSet)]
+    }, [allOrdersRaw, aplicarFiltroCentroCusto])
+
+    const paginatedOrders = filteredOrders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
     const handleExport = async (exportTipo: 'pagina' | 'filtro' | 'tudo') => {
         setExporting(true)
@@ -471,7 +261,6 @@ export default function PedidosPage() {
         }
     }
 
-    // Mostrar loading da autenticação
     if (authLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen">
@@ -480,26 +269,15 @@ export default function PedidosPage() {
         )
     }
 
-    if (!isAuthenticated) {
-        return null
-    }
+    if (!isAuthenticated) return null
 
-    // Mostrar erro se houver
     if (loadError) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen p-6">
                 <div className="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-lg max-w-md">
                     <h2 className="font-semibold">Erro ao carregar pedidos</h2>
                     <p className="text-sm mt-1">{loadError}</p>
-                    <Button
-                        variant="outline"
-                        className="mt-3"
-                        onClick={() => {
-                            setHasLoaded(false)
-                            setLoadError(null)
-                            loadAllPages()
-                        }}
-                    >
+                    <Button variant="outline" className="mt-3" onClick={reload}>
                         Tentar novamente
                     </Button>
                 </div>
@@ -507,8 +285,7 @@ export default function PedidosPage() {
         )
     }
 
-    // Mostrar loading com progresso enquanto carrega todas as páginas
-    if (loading || allOrders.length === 0) {
+    if (loading || allOrdersRaw.length === 0) {
         return (
             <div className="space-y-4 p-6">
                 <Skeleton className="h-8 w-48" />
@@ -525,25 +302,17 @@ export default function PedidosPage() {
                     {loadingProgress.total > 0 && (
                         <div className="mt-4">
                             <div className="w-full bg-muted rounded-full h-2">
-                                <div
-                                    className="bg-primary h-2 rounded-full transition-all duration-300"
-                                    style={{ width: `${(loadingProgress.current / loadingProgress.total) * 100}%` }}
-                                />
+                                <div className="bg-primary h-2 rounded-full transition-all duration-300" style={{ width: `${(loadingProgress.current / loadingProgress.total) * 100}%` }} />
                             </div>
-                            <p className="text-xs text-muted-foreground mt-2">
-                                Carregando página {loadingProgress.current} de {loadingProgress.total}
-                            </p>
+                            <p className="text-xs text-muted-foreground mt-2">Carregando página {loadingProgress.current} de {loadingProgress.total}</p>
                         </div>
                     )}
                 </div>
-                {[...Array(5)].map((_, i) => (
-                    <Skeleton key={i} className="h-16 w-full" />
-                ))}
+                {[...Array(5)].map((_, i) => (<Skeleton key={i} className="h-16 w-full" />))}
             </div>
         )
     }
 
-    // Dados carregados, mostrar tabela completa
     return (
         <div className="space-y-5 animate-fade-in p-6">
             <div className="flex items-center justify-between">
@@ -585,7 +354,7 @@ export default function PedidosPage() {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => handleExport('tudo')}>
                             <Download className="w-4 h-4 mr-2" />
-                            Todos os pedidos ({allOrders.length} itens)
+                            Todos os pedidos ({allOrdersRaw.length} itens)
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
@@ -603,7 +372,6 @@ export default function PedidosPage() {
                     />
                 </div>
 
-                {/* 🔥 FILTRO DE CENTRO DE CUSTO - VISÍVEL PARA TODOS */}
                 <Select value={centroCusto} onValueChange={setCentroCusto}>
                     <SelectTrigger className="w-48">
                         <Building2 className="w-4 h-4 mr-2" />
@@ -860,7 +628,7 @@ export default function PedidosPage() {
                 )}
             </div>
 
-            {/* Modal de detalhes - mantido igual */}
+            {/* Modal de detalhes */}
             <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
                 <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
                     <DialogHeader>

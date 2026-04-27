@@ -79,7 +79,7 @@ export const ETAPAS: EtapaInfo[] = [
     {
         nome: 'ETAPA 01',
         descricao: 'Criação da Requisição',
-        palavrasChave: ['Criou', 'Editou'],
+        palavrasChave: ['Criou', 'Editou', 'Enviou a requisição'],
         ordem: 1
     },
     {
@@ -91,15 +91,13 @@ export const ETAPAS: EtapaInfo[] = [
     {
         nome: 'ETAPA 03',
         descricao: 'Cotação',
-        palavrasChave: ['Preencheu a cotação', 'Enviou a cotação'],
+        palavrasChave: ['Preencheu a cotação', 'Enviou a cotação', 'Aprovou a cotação'],
         ordem: 3
     },
     {
         nome: 'ETAPA 04',
         descricao: 'Aprovação da Cotação',
         palavrasChave: [
-            'Aprovou a cotação',
-            'Aprovou a cotação.',
             'Marcou o pedido',
             'Gerou pedido',
             'Gerou pedido(s)'

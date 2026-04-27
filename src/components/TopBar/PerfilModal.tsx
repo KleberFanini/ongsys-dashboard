@@ -180,6 +180,7 @@ export function PerfilModal({ open, onOpenChange }: PerfilModalProps) {
                                         className="pl-9"
                                         placeholder="seu@email.com"
                                         required
+                                        readOnly
                                     />
                                 </div>
                             </div>

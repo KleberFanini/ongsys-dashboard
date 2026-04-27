@@ -10,7 +10,7 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "OngSys Dashboard",
+  title: "ERP CDC",
   description: "Dashboard para gestão financeira",
 }
 
