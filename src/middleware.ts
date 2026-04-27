@@ -13,7 +13,7 @@ export default withAuth(
             return NextResponse.next()
         }
 
-        // 🔥 ROTAS QUE CONSULTOR NÃO PODE ACESSAR
+        // ROTAS QUE CONSULTOR NÃO PODE ACESSAR
         const rotasBloqueadasParaConsultor = [
             '/fornecedores',
             '/produtos',

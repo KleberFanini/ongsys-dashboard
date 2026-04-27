@@ -30,3 +30,13 @@ export async function GET(request: NextRequest) {
         )
     }
 }
+
+// Suporte para OPTIONS (preflight requests)
+export async function OPTIONS() {
+    return new NextResponse(null, {
+        status: 204,
+        headers: {
+            'Allow': 'GET, OPTIONS',
+        },
+    })
+}

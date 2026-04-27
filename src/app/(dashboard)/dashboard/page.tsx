@@ -10,7 +10,10 @@ import {
     Filter,
     X,
     Building2,
-    AlertCircle
+    AlertCircle,
+    Clock,
+    BarChart3,
+    ChartArea
 } from "lucide-react"
 import { StatCard } from "@/src/components/StatCard"
 import { Skeleton } from "@/src/components/ui/skeleton"
@@ -263,7 +266,7 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* Cards de estatísticas */}
+            {/* Cards de estatísticas principais */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
                     title="Total de Produtos por Pedido"
@@ -365,6 +368,43 @@ export default function DashboardPage() {
                     </div>
                 </motion.div>
             </div>
+
+            {/* Card de métrica de tempo */}
+            <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+                className="rounded-xl border bg-card p-5"
+            >
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-card-foreground">Métricas de Tempo</h3>
+                    <Clock className="w-5 h-5 text-primary" />
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <p className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                            <Clock className="w-5 h-5 text-primary" />
+                            <span>Tempo Médio: Aprovação → Preenchimento da Cotação</span>
+                        </p>
+                        <p className="text-3xl font-bold text-primary">
+                            {data.averageTimeApprovalToQuotation.formatted}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-2">
+                            Baseado em {data.averageTimeApprovalToQuotation.totalOrders} pedido
+                            {data.averageTimeApprovalToQuotation.totalOrders !== 1 ? 's' : ''}
+                        </p>
+                    </div>
+
+                    <div className="pt-3 border-t border-border">
+                        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <ChartArea className="w-5 h-5 text-primary" /> Tempo decorrido entre a <strong className="text-foreground">segunda aprovação da requisição</strong> (ETAPA 3)
+                            e o <strong className="text-foreground">preenchimento da cotação</strong> (ETAPA 4)
+                        </p>
+                    </div>
+                </div>
+            </motion.div>
+
         </div>
     )
 }

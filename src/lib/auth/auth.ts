@@ -116,7 +116,6 @@ export const authOptions: NextAuthOptions = {
         maxAge: 30 * 24 * 60 * 60
     },
     secret: process.env.NEXTAUTH_SECRET,
-    // 🔥 Configuração de cookies para produção
     cookies: isProduction ? {
         sessionToken: {
             name: `__Secure-next-auth.session-token`,

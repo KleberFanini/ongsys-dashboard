@@ -1,4 +1,3 @@
-// src/components/AppSidebar.tsx
 'use client'
 
 import {
@@ -6,7 +5,6 @@ import {
     Users,
     Package,
     Package2,
-    CreditCard,
     LayoutDashboard,
     Shield
 } from "lucide-react"
@@ -41,7 +39,7 @@ export function AppSidebar() {
         }
     ]
 
-    // 🔥 SUPER_ADMIN e OPERADOR_SEDE veem Fornecedores e Produtos
+    // SUPER_ADMIN e OPERADOR_SEDE veem Fornecedores e Produtos
     const podeVerFornecedores = role === 'SUPER_ADMIN' || role === 'OPERADOR_SEDE'
     const podeVerProdutos = role === 'SUPER_ADMIN' || role === 'OPERADOR_SEDE'
     const podeVerAdmin = role === 'SUPER_ADMIN'

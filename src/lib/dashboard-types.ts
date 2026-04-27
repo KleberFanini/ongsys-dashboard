@@ -20,6 +20,14 @@ export interface DashboardSummary {
 
     unitMeasureData: UnitMeasureData[]
     recentAccounts: RecentAccount[]
+
+    averageTimeApprovalToQuotation: AverageTimeMetric
+}
+
+export interface AverageTimeMetric {
+    hours: number
+    formatted: string
+    totalOrders: number
 }
 
 export interface TopSupplier {
