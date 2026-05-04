@@ -155,7 +155,6 @@ export default function PedidosPage() {
             .sort((a, b) => a.name.localeCompare(b.name))
     }, [userRole, userCentrosCusto, allOrdersRaw, getPedidoCentrosCusto])
 
-    // 🔥 APLICAR TODOS OS FILTROS
     useEffect(() => {
         if (allOrdersRaw.length === 0) return
 
@@ -170,11 +169,16 @@ export default function PedidosPage() {
 
         if (search) {
             const searchLower = search.toLowerCase()
-            filtered = filtered.filter((order: Order) =>
-                order.titulo?.toLowerCase().includes(searchLower) ||
-                order.id_requisicao?.toLowerCase().includes(searchLower) ||
-                order.fornecedor_nome?.toLowerCase().includes(searchLower)
-            )
+            filtered = filtered.filter((order: Order) => {
+                // 🔥 CORREÇÃO: Converter para string antes de usar toLowerCase
+                const titulo = order.titulo ? String(order.titulo).toLowerCase() : ''
+                const idRequisicao = order.id_requisicao ? String(order.id_requisicao).toLowerCase() : ''
+                const fornecedor = order.fornecedor_nome ? String(order.fornecedor_nome).toLowerCase() : ''
+
+                return titulo.includes(searchLower) ||
+                    idRequisicao.includes(searchLower) ||
+                    fornecedor.includes(searchLower)
+            })
         }
 
         if (status !== 'todos') {
