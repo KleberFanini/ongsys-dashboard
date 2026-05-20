@@ -1,4 +1,3 @@
-// src/middleware.ts
 import { withAuth } from 'next-auth/middleware'
 import { NextResponse } from 'next/server'
 
@@ -21,7 +20,6 @@ export default withAuth(
             '/configuracoes'
         ]
 
-        // CONSULTOR não pode acessar rotas bloqueadas
         if (role === 'CONSULTOR') {
             if (rotasBloqueadasParaConsultor.some(rota => path.startsWith(rota))) {
                 return NextResponse.redirect(new URL('/dashboard', req.url))

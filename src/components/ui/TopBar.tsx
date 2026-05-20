@@ -65,6 +65,13 @@ const getRoleInfo = (role: string | undefined) => {
                 color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
                 badgeColor: 'border-green-500 text-green-600'
             }
+        case 'SEPOD':
+            return {
+                icon: <UserIcon className="w-3 h-3 mr-1" />,
+                label: 'Sepod',
+                color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+                badgeColor: 'border-orange-500 text-orange-600'
+            }
         default:
             return {
                 icon: <UserIcon className="w-3 h-3 mr-1" />,

@@ -1,6 +1,5 @@
-// prisma/seed.js
-const { PrismaClient } = require('@prisma/client')
-const bcrypt = require('bcryptjs')
+import { PrismaClient } from '@prisma/client'
+import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
@@ -47,6 +46,19 @@ async function main() {
         },
     })
     console.log('✅ CONSULTOR:', consultor.email)
+
+    const sepod = await prisma.usuario.upsert({
+        where: { email: 'sepod@ongsys.com.br' },
+        update: {},
+        create: {
+            email: 'sepod@ongsys.com.br',
+            senha: senhaHash,
+            nome: 'Usuário SEPOD',
+            role: 'SEPOD',
+            ativo: true,
+        },
+    })
+    console.log('✅ SEPOD:', sepod.email)
 
     console.log('🎉 Seed concluído!')
 }

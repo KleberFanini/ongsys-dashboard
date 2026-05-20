@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react"
 import { useEffect, useState } from "react"
 
-type Role = 'SUPER_ADMIN' | 'OPERADOR_SEDE' | 'CONSULTOR'
+type Role = 'SUPER_ADMIN' | 'OPERADOR_SEDE' | 'CONSULTOR' | 'SEPOD'
 
 interface User {
     id: string
@@ -23,6 +23,7 @@ interface UseAuthReturn {
     isSuperAdmin: boolean
     isOperador: boolean
     isConsultor: boolean
+    isSEPOD: boolean
     updateUser: (userData: Partial<User>) => Promise<void>
     refreshSession: () => Promise<void>
 }
@@ -74,6 +75,7 @@ export function useAuth(): UseAuthReturn {
         isSuperAdmin: role === 'SUPER_ADMIN',
         isOperador: role === 'OPERADOR_SEDE',
         isConsultor: role === 'CONSULTOR',
+        isSEPOD: role === 'SEPOD',
         updateUser,
         refreshSession
     }

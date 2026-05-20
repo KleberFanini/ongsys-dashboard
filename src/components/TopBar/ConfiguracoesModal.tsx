@@ -1,4 +1,3 @@
-// src/components/TopBar/ConfiguracoesModal.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -7,7 +6,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-    DialogDescription  // 🔥 Adicionado
+    DialogDescription
 } from "@/src/components/ui/dialog"
 import { Button } from "@/src/components/ui/button"
 import { Label } from "@/src/components/ui/label"

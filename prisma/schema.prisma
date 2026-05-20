@@ -51,4 +51,5 @@ enum Role {
   SUPER_ADMIN
   OPERADOR_SEDE
   CONSULTOR
+  SEPOD
 }

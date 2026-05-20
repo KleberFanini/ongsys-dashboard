@@ -109,6 +109,7 @@ export default function PedidosPage() {
     const [exporting, setExporting] = useState(false)
     const [activeTab, setActiveTab] = useState("detalhes")
     const [timelineFilter, setTimelineFilter] = useState<'todos' | 'etapas'>('todos')
+    const isSepod = user?.role === 'SEPOD'
 
     // 🔥 PEGAR DADOS DO USUÁRIO DA SESSÃO
     const userRole = user?.role
@@ -533,7 +534,9 @@ export default function PedidosPage() {
                                 <th className="text-left p-3 text-muted-foreground font-medium">Título</th>
                                 <th className="text-left p-3 text-muted-foreground font-medium hidden md:table-cell">Fornecedor</th>
                                 <th className="text-left p-3 text-muted-foreground font-medium hidden lg:table-cell">Data</th>
-                                <th className="text-right p-3 text-muted-foreground font-medium hidden xl:table-cell">Valor</th>
+                                {!isSepod && (
+                                    <th className="text-right p-3 text-muted-foreground font-medium hidden xl:table-cell">Valor</th>
+                                )}
                                 <th className="text-center p-3 text-muted-foreground font-medium">Status</th>
                                 <th className="text-center p-3 text-muted-foreground font-medium hidden lg:table-cell">Etapa Atual</th>
                                 <th className="text-center p-3 text-muted-foreground font-medium">Ações</th>
@@ -556,9 +559,11 @@ export default function PedidosPage() {
                                         <td className="p-3 hidden lg:table-cell text-muted-foreground">
                                             {order.data_pedido ? new Date(order.data_pedido).toLocaleDateString("pt-BR") : '---'}
                                         </td>
-                                        <td className="p-3 text-right hidden xl:table-cell text-card-foreground font-medium">
-                                            {formatCurrency(order.valor_total || 0)}
-                                        </td>
+                                        {!isSepod && (
+                                            <td className="p-3 text-right hidden xl:table-cell text-card-foreground font-medium">
+                                                {formatCurrency(order.valor_total || 0)}
+                                            </td>
+                                        )}
                                         <td className="p-3 text-center">
                                             <Badge variant="outline" className={getStatusColor(order.status_pedido || '')}>
                                                 {order.status_pedido || '---'}
@@ -661,7 +666,14 @@ export default function PedidosPage() {
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div><p className="text-xs text-muted-foreground">Data</p><p className="text-sm">{selectedOrder.data_pedido ? new Date(selectedOrder.data_pedido).toLocaleDateString("pt-BR") : '---'}</p></div>
-                                    <div><p className="text-xs text-muted-foreground">Valor</p><p className="text-sm font-bold text-primary">{formatCurrency(selectedOrder.valor_total || 0)}</p></div>
+                                    <div>
+                                        {!isSepod && (
+                                        <p className="text-xs text-muted-foreground">Valor</p>
+                                        )}
+                                        {!isSepod && (
+                                            <p className="text-sm font-bold text-primary">{formatCurrency(selectedOrder.valor_total || 0)}</p>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div><p className="text-xs text-muted-foreground">Tipo</p><p className="text-sm">{selectedOrder.tipo_pedido || '---'}</p></div>

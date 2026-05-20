@@ -31,11 +31,15 @@ const formatNumber = (v: number) =>
     new Intl.NumberFormat("pt-BR").format(v)
 
 export default function DashboardPage() {
-    const { isLoading: authLoading, isAuthenticated } = useAuth()
+    const { isLoading: authLoading, isAuthenticated, user } = useAuth()
     const [data, setData] = useState<DashboardSummary | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [partialData, setPartialData] = useState(false)
+
+    // Verificar se o usuário é SEPOD
+    const userRole = user?.role
+    const isSepod = userRole === 'SEPOD'
 
     // Estados para filtros
     const [startDate, setStartDate] = useState('')
@@ -267,36 +271,57 @@ export default function DashboardPage() {
             )}
 
             {/* Cards de estatísticas principais */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard
-                    title="Total de Produtos por Pedido"
-                    value={formatNumber(data.totalProductOrders)}
-                    subtitle="Quantidade de pedidos de produto"
-                    icon={Package}
-                    variant="info"
-                />
-                <StatCard
-                    title="Valor Total dos Produtos por Pedido"
-                    value={formatCurrency(data.totalProductOrdersValue)}
-                    subtitle="Soma dos valores de pedidos de produto"
-                    icon={DollarSign}
-                    variant="success"
-                />
-                <StatCard
-                    title="Total de Serviços por Pedido"
-                    value={formatNumber(data.totalServiceOrders)}
-                    subtitle="Quantidade de pedidos de serviço"
-                    icon={Briefcase}
-                    variant="info"
-                />
-                <StatCard
-                    title="Valor Total de Serviços por Pedido"
-                    value={formatCurrency(data.totalServiceOrdersValue)}
-                    subtitle="Soma dos valores de pedidos de serviço"
-                    icon={DollarSign}
-                    variant="success"
-                />
-            </div>
+             {isSepod ? (
+                // Layout para SEPOD - cards ocupam 2 colunas
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <StatCard
+                            title="Total de Produtos por Pedido"
+                            value={formatNumber(data.totalProductOrders)}
+                            subtitle="Quantidade de pedidos de produto"
+                            icon={Package}
+                            variant="info"
+                        />
+                    <StatCard
+                        title="Total de Serviços por Pedido"
+                        value={formatNumber(data.totalServiceOrders)}
+                        subtitle="Quantidade de pedidos de serviço"
+                        icon={Briefcase}
+                        variant="info"
+                    />
+                </div>
+            ) : (
+                // Layout normal para outros usuários
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <StatCard
+                        title="Total de Produtos por Pedido"
+                        value={formatNumber(data.totalProductOrders)}
+                        subtitle="Quantidade de pedidos de produto"
+                        icon={Package}
+                        variant="info"
+                    />
+                    <StatCard
+                        title="Valor Total dos Produtos por Pedido"
+                        value={formatCurrency(data.totalProductOrdersValue)}
+                        subtitle="Soma dos valores de pedidos de produto"
+                        icon={DollarSign}
+                        variant="success"
+                    />
+                    <StatCard
+                        title="Total de Serviços por Pedido"
+                        value={formatNumber(data.totalServiceOrders)}
+                        subtitle="Quantidade de pedidos de serviço"
+                        icon={Briefcase}
+                        variant="info"
+                    />
+                    <StatCard
+                        title="Valor Total de Serviços por Pedido"
+                        value={formatCurrency(data.totalServiceOrdersValue)}
+                        subtitle="Soma dos valores de pedidos de serviço"
+                        icon={DollarSign}
+                        variant="success"
+                    />
+                </div>
+            )}
 
             {/* Top 10 Fornecedores e Itens */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -323,7 +348,9 @@ export default function DashboardPage() {
                                             <p className="text-xs text-muted-foreground">{supplier.orderCount} pedidos</p>
                                         </div>
                                     </div>
-                                    <p className="text-sm font-bold text-primary">{formatCurrency(supplier.totalValue)}</p>
+                                    {!isSepod && (
+                                        <p className="text-sm font-bold text-primary">{formatCurrency(supplier.totalValue)}</p>
+                                    )}
                                 </div>
                             ))
                         ) : (
@@ -357,7 +384,9 @@ export default function DashboardPage() {
                                             <p className="text-xs text-muted-foreground">{item.group} • {item.orderCount}x</p>
                                         </div>
                                     </div>
-                                    <p className="text-sm font-bold text-primary">{formatCurrency(item.totalValue)}</p>
+                                    {!isSepod && (
+                                        <p className="text-sm font-bold text-primary">{formatCurrency(item.totalValue)}</p>
+                                    )}
                                 </div>
                             ))
                         ) : (

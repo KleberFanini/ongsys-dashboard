@@ -1,4 +1,3 @@
-// src/components/TopBar/PerfilModal.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -94,7 +93,6 @@ export function PerfilModal({ open, onOpenChange }: PerfilModalProps) {
 
             showToast('Perfil atualizado com sucesso!', 'success')
 
-            // Fecha o modal
             setTimeout(() => {
                 onOpenChange(false)
             }, 500)

@@ -1,14 +1,16 @@
 import { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Role } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
+type UserRole = 'SUPER_ADMIN' | 'OPERADOR_SEDE' | 'CONSULTOR' | 'SEPOD'
+
 declare module 'next-auth' {
     interface User {
         id: string
-        role: string
+        role: UserRole
         nome: string
         centrosCusto: string[]
     }
@@ -17,7 +19,7 @@ declare module 'next-auth' {
             id: string
             email: string
             name: string
-            role: string
+            role: UserRole
             centrosCusto: string[]
         }
     }
@@ -26,13 +28,12 @@ declare module 'next-auth' {
 declare module 'next-auth/jwt' {
     interface JWT {
         id: string
-        role: string
+        role: UserRole
         nome: string
         centrosCusto: string[]
     }
 }
 
-// 🔥 Detecta a URL base do ambiente
 const isProduction = process.env.NODE_ENV === 'production'
 const productionUrl = 'https://cdc-ezpoint-ongsys-dashboard.oxhwsy.easypanel.host'
 
@@ -77,11 +78,13 @@ export const authOptions: NextAuthOptions = {
                     throw new Error('Senha incorreta')
                 }
 
+                const role = usuario.role as UserRole
+
                 return {
                     id: usuario.id,
                     email: usuario.email,
                     nome: usuario.nome,
-                    role: usuario.role,
+                    role: role,
                     centrosCusto: usuario.centrosCusto || []
                 }
             }
@@ -91,7 +94,7 @@ export const authOptions: NextAuthOptions = {
         async jwt({ token, user }) {
             if (user) {
                 token.id = user.id
-                token.role = user.role
+                token.role = user.role as UserRole
                 token.nome = user.nome
                 token.centrosCusto = user.centrosCusto || []
             }
@@ -100,7 +103,7 @@ export const authOptions: NextAuthOptions = {
         async session({ session, token }) {
             if (session.user) {
                 session.user.id = token.id as string
-                session.user.role = token.role as string
+                session.user.role = token.role as UserRole
                 session.user.name = token.nome as string
                 session.user.centrosCusto = token.centrosCusto as string[]
             }
@@ -124,7 +127,7 @@ export const authOptions: NextAuthOptions = {
                 sameSite: 'lax',
                 path: '/',
                 secure: true,
-                domain: '.oxhwsy.easypanel.host' // Domínio principal
+                domain: '.oxhwsy.easypanel.host'
             }
         },
         callbackUrl: {
