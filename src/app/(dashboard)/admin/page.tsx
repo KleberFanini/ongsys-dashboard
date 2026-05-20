@@ -40,13 +40,11 @@ interface Usuario {
     id: string
     email: string
     nome: string
-    role: 'SUPER_ADMIN' | 'OPERADOR_SEDE' | 'CONSULTOR'
+    role: 'SUPER_ADMIN' | 'OPERADOR_SEDE' | 'CONSULTOR' | 'SEPOD'
     ativo: boolean
     createdAt: string
     centrosCusto?: string[]
 }
-
-// Não precisamos mais da interface CentroCusto pois vamos usar o costCentersList diretamente
 
 export default function AdminPage() {
     const { isSuperAdmin, isLoading: authLoading } = useAuth()
@@ -59,7 +57,7 @@ export default function AdminPage() {
         email: '',
         senha: '',
         role: 'CONSULTOR' as Usuario['role'],
-        centrosCusto: [] as string[]  // Array para múltiplos centros de custo
+        centrosCusto: [] as string[]
     })
 
     // Buscar usuários
@@ -215,6 +213,8 @@ export default function AdminPage() {
                 return <Badge className="bg-blue-500">Operador Sede</Badge>
             case 'CONSULTOR':
                 return <Badge className="bg-green-500">Consultor</Badge>
+            case 'SEPOD':
+                return <Badge className="bg-orange-500">SEPOD</Badge>
             default:
                 return <Badge>{role}</Badge>
         }
@@ -340,6 +340,7 @@ export default function AdminPage() {
                                                 <SelectItem value="SUPER_ADMIN">Super Administrador</SelectItem>
                                                 <SelectItem value="OPERADOR_SEDE">Operador Sede</SelectItem>
                                                 <SelectItem value="CONSULTOR">Consultor</SelectItem>
+                                                <SelectItem value="SEPOD">SEPOD</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
