@@ -1,6 +1,6 @@
 import { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
-import { PrismaClient, Role } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
@@ -35,7 +35,6 @@ declare module 'next-auth/jwt' {
 }
 
 const isProduction = process.env.NODE_ENV === 'production'
-const productionUrl = 'https://cdc-ezpoint-ongsys-dashboard.oxhwsy.easypanel.host'
 
 export const authOptions: NextAuthOptions = {
     providers: [
@@ -54,16 +53,6 @@ export const authOptions: NextAuthOptions = {
                     where: { email: credentials.email }
                 })
 
-                console.log('🔍 Usuario encontrado:', {
-                    email: usuario?.email,
-                    role: usuario?.role,
-                    centrosCusto: usuario?.centrosCusto,
-                    centrosCustoType: typeof usuario?.centrosCusto
-                })
-
-                const centrosCusto = usuario?.centrosCusto || []
-                console.log('🔍 centrosCusto após normalização:', centrosCusto)
-
                 if (!usuario) {
                     throw new Error('Usuário não encontrado')
                 }
@@ -78,13 +67,11 @@ export const authOptions: NextAuthOptions = {
                     throw new Error('Senha incorreta')
                 }
 
-                const role = usuario.role as UserRole
-
                 return {
                     id: usuario.id,
                     email: usuario.email,
                     nome: usuario.nome,
-                    role: role,
+                    role: usuario.role as UserRole,
                     centrosCusto: usuario.centrosCusto || []
                 }
             }
@@ -119,34 +106,4 @@ export const authOptions: NextAuthOptions = {
         maxAge: 30 * 24 * 60 * 60
     },
     secret: process.env.NEXTAUTH_SECRET,
-    cookies: isProduction ? {
-        sessionToken: {
-            name: `__Secure-next-auth.session-token`,
-            options: {
-                httpOnly: true,
-                sameSite: 'lax',
-                path: '/',
-                secure: true,
-                domain: '.oxhwsy.easypanel.host'
-            }
-        },
-        callbackUrl: {
-            name: `__Secure-next-auth.callback-url`,
-            options: {
-                sameSite: 'lax',
-                path: '/',
-                secure: true,
-                domain: '.oxhwsy.easypanel.host'
-            }
-        },
-        csrfToken: {
-            name: `__Host-next-auth.csrf-token`,
-            options: {
-                httpOnly: true,
-                sameSite: 'lax',
-                path: '/',
-                secure: true
-            }
-        },
-    } : undefined,
 }
