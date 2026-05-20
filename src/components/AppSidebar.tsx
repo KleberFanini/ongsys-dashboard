@@ -39,12 +39,11 @@ export function AppSidebar() {
         }
     ]
 
-    // SUPER_ADMIN, OPERADOR_SEDE e SEPOD veem Fornecedores e Produtos
-    const podeVerFornecedores = role === 'SUPER_ADMIN' || role === 'OPERADOR_SEDE' || role === 'SEPOD'
+    const podeVerFornecedores = role === 'SUPER_ADMIN' || role === 'OPERADOR_SEDE'
     const podeVerProdutos = role === 'SUPER_ADMIN' || role === 'OPERADOR_SEDE' || role === 'SEPOD'
     const podeVerAdmin = role === 'SUPER_ADMIN'
 
-    // Adicionar Fornecedores (apenas para quem pode)
+    // Adicionar Fornecedores
     if (podeVerFornecedores) {
         menuItems.push({
             title: "Fornecedores",

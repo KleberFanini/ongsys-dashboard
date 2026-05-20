@@ -26,6 +26,19 @@ export default withAuth(
             }
         }
 
+        // ROTAS QUE SEPOD NÃO PODE ACESSAR
+        const rotasBloqueadasParaSEPOD = [
+            '/fornecedores',
+            '/admin',
+            '/configuracoes'
+        ]
+
+        if ( role === 'SEPOD')  {
+            if (rotasBloqueadasParaSEPOD.some(rota => path.startsWith(rota))) {
+                return NextResponse.redirect(new URL('/dashboard', req.url))
+            }
+        }
+
         // OPERADOR_SEDE não pode acessar /admin
         if (role === 'OPERADOR_SEDE' && path.startsWith('/admin')) {
             return NextResponse.redirect(new URL('/dashboard', req.url))
