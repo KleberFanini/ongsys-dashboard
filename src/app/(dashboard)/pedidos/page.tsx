@@ -1,4 +1,3 @@
-// src/app/(dashboard)/pedidos/page.tsx
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from "react"
@@ -58,7 +57,9 @@ interface Order {
     fornecedor_nome: string
     fornecedor_documento?: string
     requisitante?: string
+    comprador?: string
     data_pedido: string
+    dataEntregaEstimada?: string
     tipo_pedido: string
     valor_total: number
     local_entrega?: any
@@ -93,6 +94,15 @@ const getEtapaColor = (etapa: string): string => {
     return colors[etapa] || 'border-gray-500 text-gray-600 bg-gray-50 dark:bg-gray-950/30'
 }
 
+// Função para extrair informações do pedido
+const getPedidoInfo = (pedido: Order) => {
+    const primeiroItem = pedido.itens_pedido?.[0]
+    return {
+        centroCusto: primeiroItem?.centroCusto || '---',
+        grupo: primeiroItem?.grupo || '---'
+    }
+}
+
 export default function PedidosPage() {
     const { isLoading: authLoading, isAuthenticated, user } = useAuth()
     const { data: allOrdersRaw, loading, loadingProgress, loadError, reload } = usePedidos()
@@ -125,22 +135,33 @@ export default function PedidosPage() {
     }, [])
 
     // FUNÇÃO PARA VERIFICAR SE PEDIDO PERTENCE AOS CENTROS DO USUÁRIO
-    const pedidoPertenceAoConsultor = useCallback((pedido: Order): boolean => {
-        if (userRole !== 'CONSULTOR') return true
-        if (!userCentrosCusto.length) return false
-        const centrosPedido = getPedidoCentrosCusto(pedido)
-        return centrosPedido.some(centro => userCentrosCusto.includes(centro))
+    const pedidoPertenceAoUsuario = useCallback((pedido: Order): boolean => {
+        if (userRole === 'SUPER_ADMIN' || userRole === 'OPERADOR_SEDE') return true
+        if (userRole === 'CONSULTOR' || userRole === 'SEPOD') {
+            if (!userCentrosCusto.length) return false
+            const centrosPedido = getPedidoCentrosCusto(pedido)
+            return centrosPedido.some(centro => userCentrosCusto.includes(centro))
+        }
+        return true
     }, [userRole, userCentrosCusto, getPedidoCentrosCusto])
 
     // FUNÇÃO PARA APLICAR FILTRO DE CENTRO DE CUSTO
     const aplicarFiltroCentroCusto = useCallback((pedidos: Order[]): Order[] => {
-        if (userRole !== 'CONSULTOR') return pedidos
-        return pedidos.filter(pedido => pedidoPertenceAoConsultor(pedido))
-    }, [userRole, pedidoPertenceAoConsultor])
+        if (userRole === 'CONSULTOR' || userRole === 'SEPOD') {
+            return pedidos.filter(pedido => pedidoPertenceAoUsuario(pedido))
+        }
+        return pedidos
+    }, [userRole, pedidoPertenceAoUsuario])
 
     // CALCULAR CENTROS DE CUSTO DISPONÍVEIS PARA O FILTRO
     const availableCostCenters = useMemo(() => {
         if (userRole === 'CONSULTOR') {
+            return userCentrosCusto.map(code => ({
+                code,
+                name: getCostCenterName(code)
+            }))
+        }
+        if (userRole === 'SEPOD') {
             return userCentrosCusto.map(code => ({
                 code,
                 name: getCostCenterName(code)
@@ -171,7 +192,6 @@ export default function PedidosPage() {
         if (search) {
             const searchLower = search.toLowerCase()
             filtered = filtered.filter((order: Order) => {
-                // CORREÇÃO: Converter para string antes de usar toLowerCase
                 const titulo = order.titulo ? String(order.titulo).toLowerCase() : ''
                 const idRequisicao = order.id_requisicao ? String(order.id_requisicao).toLowerCase() : ''
                 const fornecedor = order.fornecedor_nome ? String(order.fornecedor_nome).toLowerCase() : ''
@@ -325,11 +345,6 @@ export default function PedidosPage() {
                     <h1 className="text-2xl font-bold text-foreground">Pedidos</h1>
                     <p className="text-muted-foreground">
                         {totalItems.toLocaleString("pt-BR")} pedidos encontrados
-                        {userRole === 'CONSULTOR' && userCentrosCusto.length > 0 && (
-                            <span className="text-xs ml-2 text-primary">
-                                (Apenas centros: {userCentrosCusto.map(c => getCostCenterName(c)).join(', ')})
-                            </span>
-                        )}
                         {totalItems > PAGE_SIZE && (
                             <span className="text-xs ml-2">
                                 (mostrando {paginatedOrders.length} na página {page})
@@ -384,7 +399,7 @@ export default function PedidosPage() {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="todos">
-                            {userRole === 'CONSULTOR' ? 'Todos os meus centros' : 'Todos os centros'}
+                            {(userRole === 'CONSULTOR' || userRole === 'SEPOD') ? 'Todos os meus centros' : 'Todos os centros'}
                         </SelectItem>
                         {availableCostCenters.map((center) => (
                             <SelectItem key={center.code} value={center.code}>
@@ -530,73 +545,186 @@ export default function PedidosPage() {
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-border bg-muted/50">
-                                <th className="text-left p-3 text-muted-foreground font-medium">ID Requisição</th>
-                                <th className="text-left p-3 text-muted-foreground font-medium">Título</th>
-                                <th className="text-left p-3 text-muted-foreground font-medium hidden md:table-cell">Fornecedor</th>
-                                <th className="text-left p-3 text-muted-foreground font-medium hidden lg:table-cell">Data</th>
-                                {!isSepod && (
-                                    <th className="text-right p-3 text-muted-foreground font-medium hidden xl:table-cell">Valor</th>
+                                {isSepod ? (
+                                    // Cabeçalho para SEPOD
+                                    <>
+                                        <th className="text-left p-3 text-muted-foreground font-medium w-[120px]">ID Requisição</th>
+                                        <th className="text-left p-3 text-muted-foreground font-medium min-w-[200px]">Título</th>
+                                        <th className="text-left p-3 text-muted-foreground font-medium w-[150px]">Centro de Custo</th>
+                                        <th className="text-left p-3 text-muted-foreground font-medium w-[150px]">Grupo</th>
+                                        <th className="text-left p-3 text-muted-foreground font-medium min-w-[180px]">Requisitante</th>
+                                        <th className="text-left p-3 text-muted-foreground font-medium min-w-[180px]">Comprador</th>
+                                        <th className="text-left p-3 text-muted-foreground font-medium w-[110px]">Data Pedido</th>
+                                        <th className="text-left p-3 text-muted-foreground font-medium w-[110px]">Data Entrega</th>
+                                        <th className="text-center p-3 text-muted-foreground font-medium w-[120px]">Status</th>
+                                        <th className="text-center p-3 text-muted-foreground font-medium w-[110px]">Etapa</th>
+                                        <th className="text-center p-3 text-muted-foreground font-medium w-[80px]">Ações</th>
+                                    </>
+                                ) : (
+                                    // Cabeçalho normal para outros usuários
+                                    <>
+                                        <th className="text-left p-3 text-muted-foreground font-medium w-[120px]">ID Requisição</th>
+                                        <th className="text-left p-3 text-muted-foreground font-medium min-w-[250px]">Título</th>
+                                        <th className="text-left p-3 text-muted-foreground font-medium hidden md:table-cell min-w-[200px]">Fornecedor</th>
+                                        <th className="text-left p-3 text-muted-foreground font-medium hidden lg:table-cell w-[110px]">Data</th>
+                                        <th className="text-right p-3 text-muted-foreground font-medium hidden xl:table-cell w-[120px]">Valor</th>
+                                        <th className="text-center p-3 text-muted-foreground font-medium w-[120px]">Status</th>
+                                        <th className="text-center p-3 text-muted-foreground font-medium hidden lg:table-cell w-[110px]">Etapa Atual</th>
+                                        <th className="text-center p-3 text-muted-foreground font-medium w-[80px]">Ações</th>
+                                    </>
                                 )}
-                                <th className="text-center p-3 text-muted-foreground font-medium">Status</th>
-                                <th className="text-center p-3 text-muted-foreground font-medium hidden lg:table-cell">Etapa Atual</th>
-                                <th className="text-center p-3 text-muted-foreground font-medium">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
                             {paginatedOrders.map((order, index) => {
                                 const etapaAtual = identificarEtapaAtual(order.logs || [])
-                                return (
-                                    <motion.tr
-                                        key={order.id || order.id_requisicao}
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: index * 0.03 }}
-                                        className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                                    >
-                                        <td className="p-3 font-mono text-xs text-card-foreground">{order.id_requisicao}</td>
-                                        <td className="p-3 text-card-foreground font-medium max-w-[200px] truncate">{order.titulo}</td>
-                                        <td className="p-3 hidden md:table-cell text-card-foreground">{order.fornecedor_nome || '---'}</td>
-                                        <td className="p-3 hidden lg:table-cell text-muted-foreground">
-                                            {order.data_pedido ? new Date(order.data_pedido).toLocaleDateString("pt-BR") : '---'}
-                                        </td>
-                                        {!isSepod && (
-                                            <td className="p-3 text-right hidden xl:table-cell text-card-foreground font-medium">
+                                const pedidoInfo = getPedidoInfo(order)
+
+                                if (isSepod) {
+                                    // Linha para SEPOD
+                                    return (
+                                        <motion.tr
+                                            key={order.id || order.id_requisicao}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: index * 0.03 }}
+                                            className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                                        >
+                                            <td className="p-3 font-mono text-xs text-card-foreground align-top">
+                                                <span className="whitespace-normal break-words">
+                                                    {order.id_requisicao}
+                                                </span>
+                                            </td>
+                                            <td className="p-3 text-card-foreground font-medium align-top">
+                                                <div className="whitespace-normal break-words max-w-[300px]">
+                                                    {order.titulo}
+                                                </div>
+                                            </td>
+                                            <td className="p-3 text-card-foreground align-top">
+                                                <div className="flex flex-col">
+                                                    <span className="font-mono text-xs whitespace-normal break-words">
+                                                        {pedidoInfo.centroCusto}
+                                                    </span>
+                                                    <span className="text-xs text-muted-foreground mt-1">
+                                                        {getCostCenterName(pedidoInfo.centroCusto)}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="p-3 text-card-foreground align-top">
+                                                <span className="whitespace-normal break-words">
+                                                    {pedidoInfo.grupo}
+                                                </span>
+                                            </td>
+                                            <td className="p-3 text-card-foreground align-top">
+                                                <div className="whitespace-normal break-words max-w-[200px]">
+                                                    {order.requisitante || '---'}
+                                                </div>
+                                            </td>
+                                            <td className="p-3 text-card-foreground align-top">
+                                                <div className="whitespace-normal break-words max-w-[200px]">
+                                                    {order.comprador || order.requisitante || '---'}
+                                                </div>
+                                            </td>
+                                            <td className="p-3 text-muted-foreground align-top whitespace-nowrap">
+                                                {order.data_pedido ? new Date(order.data_pedido).toLocaleDateString("pt-BR") : '---'}
+                                            </td>
+                                            <td className="p-3 text-muted-foreground align-top whitespace-nowrap">
+                                                {order.dataEntregaEstimada ? new Date(order.dataEntregaEstimada).toLocaleDateString("pt-BR") : '---'}
+                                            </td>
+                                            <td className="p-3 text-center align-top">
+                                                <Badge variant="outline" className={getStatusColor(order.status_pedido || '')}>
+                                                    {order.status_pedido || '---'}
+                                                </Badge>
+                                            </td>
+                                            <td className="p-3 text-center align-top">
+                                                {etapaAtual ? (
+                                                    <Badge variant="outline" className={getEtapaColor(etapaAtual)}>
+                                                        {etapaAtual}
+                                                    </Badge>
+                                                ) : (
+                                                    <Badge variant="outline">---</Badge>
+                                                )}
+                                            </td>
+                                            <td className="p-3 text-center align-top">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        setSelectedOrder(order)
+                                                        setActiveTab("detalhes")
+                                                        setTimelineFilter('todos')
+                                                    }}
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                </Button>
+                                            </td>
+                                        </motion.tr>
+                                    )
+                                } else {
+                                    // Linha normal para outros usuários
+                                    return (
+                                        <motion.tr
+                                            key={order.id || order.id_requisicao}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: index * 0.03 }}
+                                            className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                                        >
+                                            <td className="p-3 font-mono text-xs text-card-foreground align-top">
+                                                <span className="whitespace-normal break-words">
+                                                    {order.id_requisicao}
+                                                </span>
+                                            </td>
+                                            <td className="p-3 text-card-foreground font-medium align-top">
+                                                <div className="whitespace-normal break-words max-w-[300px]">
+                                                    {order.titulo}
+                                                </div>
+                                            </td>
+                                            <td className="p-3 hidden md:table-cell text-card-foreground align-top">
+                                                <div className="whitespace-normal break-words max-w-[250px]">
+                                                    {order.fornecedor_nome || '---'}
+                                                </div>
+                                            </td>
+                                            <td className="p-3 hidden lg:table-cell text-muted-foreground align-top whitespace-nowrap">
+                                                {order.data_pedido ? new Date(order.data_pedido).toLocaleDateString("pt-BR") : '---'}
+                                            </td>
+                                            <td className="p-3 text-right hidden xl:table-cell text-card-foreground font-medium align-top whitespace-nowrap">
                                                 {formatCurrency(order.valor_total || 0)}
                                             </td>
-                                        )}
-                                        <td className="p-3 text-center">
-                                            <Badge variant="outline" className={getStatusColor(order.status_pedido || '')}>
-                                                {order.status_pedido || '---'}
-                                            </Badge>
-                                        </td>
-                                        <td className="p-3 text-center hidden lg:table-cell">
-                                            {etapaAtual ? (
-                                                <Badge variant="outline" className={getEtapaColor(etapaAtual)}>
-                                                    {etapaAtual}
+                                            <td className="p-3 text-center align-top">
+                                                <Badge variant="outline" className={getStatusColor(order.status_pedido || '')}>
+                                                    {order.status_pedido || '---'}
                                                 </Badge>
-                                            ) : (
-                                                <Badge variant="outline">---</Badge>
-                                            )}
-                                        </td>
-                                        <td className="p-3 text-center">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => {
-                                                    setSelectedOrder(order)
-                                                    setActiveTab("detalhes")
-                                                    setTimelineFilter('todos')
-                                                }}
-                                            >
-                                                <Eye className="w-4 h-4" />
-                                            </Button>
-                                        </td>
-                                    </motion.tr>
-                                )
+                                            </td>
+                                            <td className="p-3 text-center hidden lg:table-cell align-top">
+                                                {etapaAtual ? (
+                                                    <Badge variant="outline" className={getEtapaColor(etapaAtual)}>
+                                                        {etapaAtual}
+                                                    </Badge>
+                                                ) : (
+                                                    <Badge variant="outline">---</Badge>
+                                                )}
+                                            </td>
+                                            <td className="p-3 text-center align-top">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        setSelectedOrder(order)
+                                                        setActiveTab("detalhes")
+                                                        setTimelineFilter('todos')
+                                                    }}
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                </Button>
+                                            </td>
+                                        </motion.tr>
+                                    )
+                                }
                             })}
                             {paginatedOrders.length === 0 && (
                                 <tr>
-                                    <td colSpan={8} className="p-8 text-center text-muted-foreground">
+                                    <td colSpan={isSepod ? 11 : 8} className="p-8 text-center text-muted-foreground">
                                         Nenhum pedido encontrado com os filtros selecionados
                                     </td>
                                 </tr>
@@ -661,23 +789,44 @@ export default function PedidosPage() {
                                 </div>
                                 <div><p className="text-xs text-muted-foreground">Título</p><p className="text-sm">{selectedOrder.titulo}</p></div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><p className="text-xs text-muted-foreground">Fornecedor</p><p className="text-sm font-medium">{selectedOrder.fornecedor_nome}</p></div>
-                                    <div><p className="text-xs text-muted-foreground">Requisitante</p><p className="text-sm">{selectedOrder.requisitante || '---'}</p></div>
+                                    <div>
+                                        {isSepod ? (
+                                            <>
+                                                <p className="text-xs text-muted-foreground">Comprador</p>
+                                                <p className="text-sm font-medium">{selectedOrder.comprador || '---'}</p>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <p className="text-xs text-muted-foreground">Fornecedor</p>
+                                                <p className="text-sm font-medium">{selectedOrder.fornecedor_nome || '---'}</p>
+                                            </>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Requisitante</p>
+                                        <p className="text-sm">{selectedOrder.requisitante || '---'}</p>
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div><p className="text-xs text-muted-foreground">Data</p><p className="text-sm">{selectedOrder.data_pedido ? new Date(selectedOrder.data_pedido).toLocaleDateString("pt-BR") : '---'}</p></div>
                                     <div>
                                         {!isSepod && (
-                                        <p className="text-xs text-muted-foreground">Valor</p>
-                                        )}
-                                        {!isSepod && (
-                                            <p className="text-sm font-bold text-primary">{formatCurrency(selectedOrder.valor_total || 0)}</p>
+                                            <>
+                                                <p className="text-xs text-muted-foreground">Valor</p>
+                                                <p className="text-sm font-bold text-primary">{formatCurrency(selectedOrder.valor_total || 0)}</p>
+                                            </>
                                         )}
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div><p className="text-xs text-muted-foreground">Tipo</p><p className="text-sm">{selectedOrder.tipo_pedido || '---'}</p></div>
-                                    <div><p className="text-xs text-muted-foreground">Fonte Pagadora</p><p className="text-sm">{selectedOrder.fonte_pagadora || '---'}</p></div>
+                                    <div>
+                                        {!isSepod && (
+                                            <>
+                                                <p className="text-xs text-muted-foreground">Fonte Pagadora</p><p className="text-sm">{selectedOrder.fonte_pagadora || '---'}</p>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                                 {selectedOrder.descricao_pedido && (
                                     <div><p className="text-xs text-muted-foreground">Descrição</p><p className="text-sm bg-muted/30 p-3 rounded-md">{selectedOrder.descricao_pedido}</p></div>

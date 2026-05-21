@@ -46,6 +46,7 @@ export interface Order {
     comprador?: string
     demandante?: string
     data_pedido?: string
+    dataEntregaEstimada?: string
     numero_referencia?: string
     tipo_pedido?: string
     fonte_pagadora?: string

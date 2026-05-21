@@ -7,7 +7,9 @@ export interface Order {
     fornecedor_nome: string
     fornecedor_documento?: string
     requisitante?: string
+    comprador?: string  
     data_pedido: string
+    dataEntregaEstimada?: string  
     tipo_pedido: string
     valor_total: number
     local_entrega?: any

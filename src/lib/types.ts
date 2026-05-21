@@ -1,5 +1,3 @@
-// ongsys-dashboard/src/lib/types.ts
-
 // ===== CONTAS A PAGAR =====
 export interface ContaPagar {
     id: number
@@ -62,7 +60,7 @@ export interface Pedido {
     status?: string
     aliquota_irrf?: number
     aliquota_iss?: number
-    itens?: any // JSONB - array de itens do pedido
+    itens?: any
     rateios?: any
     dados_completos?: any
     imported_at: string
