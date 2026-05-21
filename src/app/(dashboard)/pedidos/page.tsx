@@ -111,11 +111,11 @@ export default function PedidosPage() {
     const [timelineFilter, setTimelineFilter] = useState<'todos' | 'etapas'>('todos')
     const isSepod = user?.role === 'SEPOD'
 
-    // 🔥 PEGAR DADOS DO USUÁRIO DA SESSÃO
+    // PEGAR DADOS DO USUÁRIO DA SESSÃO
     const userRole = user?.role
     const userCentrosCusto: string[] = user?.centrosCusto ?? []
 
-    // 🔥 FUNÇÃO PARA EXTRAIR CENTROS DE CUSTO DE UM PEDIDO
+    // FUNÇÃO PARA EXTRAIR CENTROS DE CUSTO DE UM PEDIDO
     const getPedidoCentrosCusto = useCallback((pedido: Order): string[] => {
         const centros = new Set<string>()
         pedido.itens_pedido?.forEach((item: any) => {
@@ -124,7 +124,7 @@ export default function PedidosPage() {
         return Array.from(centros)
     }, [])
 
-    // 🔥 FUNÇÃO PARA VERIFICAR SE PEDIDO PERTENCE AOS CENTROS DO USUÁRIO
+    // FUNÇÃO PARA VERIFICAR SE PEDIDO PERTENCE AOS CENTROS DO USUÁRIO
     const pedidoPertenceAoConsultor = useCallback((pedido: Order): boolean => {
         if (userRole !== 'CONSULTOR') return true
         if (!userCentrosCusto.length) return false
@@ -132,13 +132,13 @@ export default function PedidosPage() {
         return centrosPedido.some(centro => userCentrosCusto.includes(centro))
     }, [userRole, userCentrosCusto, getPedidoCentrosCusto])
 
-    // 🔥 FUNÇÃO PARA APLICAR FILTRO DE CENTRO DE CUSTO
+    // FUNÇÃO PARA APLICAR FILTRO DE CENTRO DE CUSTO
     const aplicarFiltroCentroCusto = useCallback((pedidos: Order[]): Order[] => {
         if (userRole !== 'CONSULTOR') return pedidos
         return pedidos.filter(pedido => pedidoPertenceAoConsultor(pedido))
     }, [userRole, pedidoPertenceAoConsultor])
 
-    // 🔥 CALCULAR CENTROS DE CUSTO DISPONÍVEIS PARA O FILTRO
+    // CALCULAR CENTROS DE CUSTO DISPONÍVEIS PARA O FILTRO
     const availableCostCenters = useMemo(() => {
         if (userRole === 'CONSULTOR') {
             return userCentrosCusto.map(code => ({
@@ -171,7 +171,7 @@ export default function PedidosPage() {
         if (search) {
             const searchLower = search.toLowerCase()
             filtered = filtered.filter((order: Order) => {
-                // 🔥 CORREÇÃO: Converter para string antes de usar toLowerCase
+                // CORREÇÃO: Converter para string antes de usar toLowerCase
                 const titulo = order.titulo ? String(order.titulo).toLowerCase() : ''
                 const idRequisicao = order.id_requisicao ? String(order.id_requisicao).toLowerCase() : ''
                 const fornecedor = order.fornecedor_nome ? String(order.fornecedor_nome).toLowerCase() : ''

@@ -32,3 +32,14 @@ export function getCostCenterName(code: string): string {
 export const costCentersList = Object.entries(costCentersMap)
     .map(([code, name]) => ({ code, name }))
     .sort((a, b) => a.name.localeCompare(b.name))
+
+// Função para verificar se um centro é do tipo ATITUDE
+export function isAtitudeCenter(code: string): boolean {
+    const name = getCostCenterName(code)
+    return name.toUpperCase().includes('ATITUDE')
+}
+
+// Função para filtrar apenas centros ATITUDE
+export function getAtitudeOnlyCostCenters(): { code: string; name: string }[] {
+    return costCentersList.filter(center => center.name.toUpperCase().includes('ATITUDE'))
+}

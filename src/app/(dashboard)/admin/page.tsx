@@ -46,6 +46,13 @@ interface Usuario {
     centrosCusto?: string[]
 }
 
+// 🔥 Função para filtrar centros de custo que contêm "ATITUDE"
+const getAtitudeCostCenters = (): string[] => {
+    return costCentersList
+        .filter(centro => centro.name.toUpperCase().includes('ATITUDE'))
+        .map(centro => centro.code)
+}
+
 export default function AdminPage() {
     const { isSuperAdmin, isLoading: authLoading } = useAuth()
     const [usuarios, setUsuarios] = useState<Usuario[]>([])
@@ -116,6 +123,27 @@ export default function AdminPage() {
     // Verificar se deve mostrar o campo centros de custo
     const shouldShowCentrosCusto = formData.role === 'CONSULTOR'
 
+    // 🔥 Quando o role mudar para SEPOD, preencher automaticamente com os centros ATITUDE
+    const handleRoleChange = (value: string) => {
+        const newRole = value as Usuario['role']
+        
+        if (newRole === 'SEPOD') {
+            // Para SEPOD, preencher com todos os centros que contêm "ATITUDE"
+            const atitudeCenters = getAtitudeCostCenters()
+            setFormData({
+                ...formData,
+                role: newRole,
+                centrosCusto: atitudeCenters
+            })
+        } else {
+            setFormData({
+                ...formData,
+                role: newRole,
+                centrosCusto: []
+            })
+        }
+    }
+
     // Gerenciar seleção de centros de custo
     const handleCentroCustoToggle = (centroCode: string) => {
         setFormData(prev => {
@@ -143,6 +171,12 @@ export default function AdminPage() {
             return
         }
 
+        // 🔥 Validação para SEPOD: garantir que tem centros ATITUDE
+        if (formData.role === 'SEPOD' && formData.centrosCusto.length === 0) {
+            alert('Erro: Não foi possível associar centros de custo ATITUDE ao usuário SEPOD. Verifique se existem centros cadastrados.')
+            return
+        }
+
         try {
             const url = editingUser
                 ? `/api/admin/usuarios/${editingUser.id}`
@@ -154,7 +188,9 @@ export default function AdminPage() {
                 email: formData.email,
                 role: formData.role,
                 ...(formData.senha && { senha: formData.senha }),
-                ...(formData.role === 'CONSULTOR' && { centrosCusto: formData.centrosCusto })
+                ...((formData.role === 'CONSULTOR' || formData.role === 'SEPOD') && { 
+                    centrosCusto: formData.centrosCusto 
+                })
             }
 
             const response = await fetch(url, {
@@ -325,13 +361,7 @@ export default function AdminPage() {
                                         <Label htmlFor="role">Nível de Acesso</Label>
                                         <Select
                                             value={formData.role}
-                                            onValueChange={(value) => {
-                                                setFormData({
-                                                    ...formData,
-                                                    role: value as Usuario['role'],
-                                                    centrosCusto: []
-                                                })
-                                            }}
+                                            onValueChange={handleRoleChange}
                                         >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Selecione o nível" />
@@ -345,17 +375,21 @@ export default function AdminPage() {
                                         </Select>
                                     </div>
 
-                                    {/* Campos de Centro de Custo - aparece apenas para CONSULTOR */}
-                                    {shouldShowCentrosCusto && (
+                                    {/* Campos de Centro de Custo - aparece para CONSULTOR e SEPOD */}
+                                    {(shouldShowCentrosCusto || formData.role === 'SEPOD') && (
                                         <div className="space-y-3 border-l-4 border-blue-500 pl-4 py-3 bg-blue-50 dark:bg-blue-950/30 rounded-r-md">
                                             <div className="flex items-center gap-2">
                                                 <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                                                 <Label className="text-blue-700 dark:text-blue-300 font-semibold">
-                                                    Centros de Custo Permitidos *
+                                                    Centros de Custo Permitidos 
+                                                    {formData.role === 'SEPOD' && ' (ATITUDE - Automático)'}
+                                                    {formData.role === 'CONSULTOR' && ' *'}
                                                 </Label>
                                             </div>
                                             <p className="text-sm text-blue-600 dark:text-blue-400">
-                                                Selecione um ou mais centros de custo que este consultor pode acessar
+                                                {formData.role === 'SEPOD' 
+                                                    ? 'Usuários SEPOD têm acesso automático a todos os centros de custo ATITUDE'
+                                                    : 'Selecione um ou mais centros de custo que este consultor pode acessar'}
                                             </p>
 
                                             {costCentersList.length === 0 ? (
@@ -364,46 +398,72 @@ export default function AdminPage() {
                                                 </div>
                                             ) : (
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto p-2 border rounded-md bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
-                                                    {costCentersList.map((centro) => (
-                                                        <div key={centro.code} className="flex items-center space-x-3 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800">
-                                                            <Checkbox
-                                                                id={`centro-${centro.code}`}
-                                                                checked={formData.centrosCusto.includes(centro.code)}
-                                                                onCheckedChange={() => handleCentroCustoToggle(centro.code)}
-                                                                className="border-gray-300 dark:border-gray-600"
-                                                            />
-                                                            <Label
-                                                                htmlFor={`centro-${centro.code}`}
-                                                                className="flex-1 cursor-pointer font-normal dark:text-gray-100"
-                                                            >
-                                                                <div className="font-mono text-sm">{centro.code}</div>
-                                                                <div className="text-xs dark:text-gray-400">{centro.name}</div>
-                                                            </Label>
-                                                        </div>
-                                                    ))}
+                                                    {costCentersList.map((centro) => {
+                                                        const isAtitude = centro.name.toUpperCase().includes('ATITUDE')
+                                                        const isDisabled = formData.role === 'SEPOD' && !isAtitude
+                                                        
+                                                        return (
+                                                            <div key={centro.code} className={`flex items-center space-x-3 p-2 rounded ${isDisabled ? 'opacity-50 bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                                                                <Checkbox
+                                                                    id={`centro-${centro.code}`}
+                                                                    checked={formData.centrosCusto.includes(centro.code)}
+                                                                    onCheckedChange={() => handleCentroCustoToggle(centro.code)}
+                                                                    disabled={isDisabled}
+                                                                    className="border-gray-300 dark:border-gray-600"
+                                                                />
+                                                                <Label
+                                                                    htmlFor={`centro-${centro.code}`}
+                                                                    className={`flex-1 cursor-pointer font-normal dark:text-gray-100 ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                                                                >
+                                                                    <div className="font-mono text-sm">{centro.code}</div>
+                                                                    <div className="text-xs dark:text-gray-400">
+                                                                        {centro.name}
+                                                                        {isAtitude && formData.role === 'SEPOD' && (
+                                                                            <Badge variant="outline" className="ml-2 text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                                                                ATITUDE
+                                                                            </Badge>
+                                                                        )}
+                                                                    </div>
+                                                                </Label>
+                                                            </div>
+                                                        )
+                                                    })}
                                                 </div>
                                             )}
 
                                             {formData.centrosCusto.length > 0 && (
                                                 <div className="flex flex-wrap gap-2 mt-2">
                                                     <span className="text-xs dark:text-gray-400">Selecionados: </span>
-                                                    {formData.centrosCusto.map(cc => (
-                                                        <Badge
-                                                            key={cc}
-                                                            variant="secondary"
-                                                            className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-                                                        >
-                                                            {cc}
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleCentroCustoToggle(cc)}
-                                                                className="ml-1 hover:text-red-500 dark:hover:text-red-400"
+                                                    {formData.centrosCusto.map(cc => {
+                                                        const centerName = getCostCenterName(cc)
+                                                        const isAtitude = centerName.toUpperCase().includes('ATITUDE')
+                                                        return (
+                                                            <Badge
+                                                                key={cc}
+                                                                variant="secondary"
+                                                                className={`text-xs ${isAtitude ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}
                                                             >
-                                                                ×
-                                                            </button>
-                                                        </Badge>
-                                                    ))}
+                                                                {cc}
+                                                                {formData.role === 'SEPOD' && ' (ATITUDE)'}
+                                                                {formData.role === 'CONSULTOR' && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleCentroCustoToggle(cc)}
+                                                                        className="ml-1 hover:text-red-500 dark:hover:text-red-400"
+                                                                    >
+                                                                        ×
+                                                                    </button>
+                                                                )}
+                                                            </Badge>
+                                                        )
+                                                    })}
                                                 </div>
+                                            )}
+
+                                            {formData.role === 'SEPOD' && (
+                                                <p className="text-xs text-green-600 dark:text-green-400 mt-2">
+                                                    ✅ Usuário SEPOD configurado com acesso a todos os centros de custo ATITUDE
+                                                </p>
                                             )}
                                         </div>
                                     )}
@@ -494,11 +554,11 @@ export default function AdminPage() {
                                     <TableCell>{usuario.email}</TableCell>
                                     <TableCell>{getRoleBadge(usuario.role)}</TableCell>
                                     <TableCell>
-                                        {usuario.role === 'CONSULTOR' ? (
+                                        {usuario.role === 'CONSULTOR' || usuario.role === 'SEPOD' ? (
                                             usuario.centrosCusto && usuario.centrosCusto.length > 0 ? (
                                                 <div className="flex flex-wrap gap-1">
                                                     {usuario.centrosCusto.map(cc => (
-                                                        <Badge key={cc} variant="outline" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs">
+                                                        <Badge key={cc} variant="outline" className={`text-xs ${usuario.role === 'SEPOD' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'}`}>
                                                             {cc}
                                                         </Badge>
                                                     ))}

@@ -36,6 +36,7 @@ export default function DashboardPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [partialData, setPartialData] = useState(false)
+    const userCentrosCusto = user?.centrosCusto ?? []
 
     // Verificar se o usuário é SEPOD
     const userRole = user?.role

@@ -1,11 +1,24 @@
 import { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Role } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
 type UserRole = 'SUPER_ADMIN' | 'OPERADOR_SEDE' | 'CONSULTOR' | 'SEPOD'
+
+// 🔥 Função para filtrar apenas centros ATITUDE para SEPOD
+function filterAtitudeCenters(centrosCusto: string[]): string[] {
+    // Importar dinamicamente para evitar circular dependency
+    const { costCentersList } = require('@/src/lib/cost-centers-map')
+    
+    // Filtrar apenas centros que contêm "ATITUDE" no nome
+    const atitudeCodes = costCentersList
+        .filter((center: any) => center.name.toUpperCase().includes('ATITUDE'))
+        .map((center: any) => center.code)
+    
+    return centrosCusto.filter(code => atitudeCodes.includes(code))
+}
 
 declare module 'next-auth' {
     interface User {
@@ -67,12 +80,20 @@ export const authOptions: NextAuthOptions = {
                     throw new Error('Senha incorreta')
                 }
 
+                let centrosCusto = usuario.centrosCusto || []
+                
+                // 🔥 Para SEPOD, filtrar apenas centros ATITUDE
+                if (usuario.role === 'SEPOD') {
+                    centrosCusto = filterAtitudeCenters(centrosCusto)
+                    console.log('🔒 SEPOD - Centros ATITUDE filtrados:', centrosCusto)
+                }
+
                 return {
                     id: usuario.id,
                     email: usuario.email,
                     nome: usuario.nome,
                     role: usuario.role as UserRole,
-                    centrosCusto: usuario.centrosCusto || []
+                    centrosCusto: centrosCusto
                 }
             }
         })
@@ -106,4 +127,34 @@ export const authOptions: NextAuthOptions = {
         maxAge: 30 * 24 * 60 * 60
     },
     secret: process.env.NEXTAUTH_SECRET,
+    cookies: isProduction ? {
+        sessionToken: {
+            name: `__Secure-next-auth.session-token`,
+            options: {
+                httpOnly: true,
+                sameSite: 'lax',
+                path: '/',
+                secure: true,
+                domain: '.oxhwsy.easypanel.host'
+            }
+        },
+        callbackUrl: {
+            name: `__Secure-next-auth.callback-url`,
+            options: {
+                sameSite: 'lax',
+                path: '/',
+                secure: true,
+                domain: '.oxhwsy.easypanel.host'
+            }
+        },
+        csrfToken: {
+            name: `__Host-next-auth.csrf-token`,
+            options: {
+                httpOnly: true,
+                sameSite: 'lax',
+                path: '/',
+                secure: true
+            }
+        },
+    } : undefined,
 }

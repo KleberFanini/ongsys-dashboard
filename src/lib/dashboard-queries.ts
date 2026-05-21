@@ -117,8 +117,8 @@ export async function getDashboardSummaryFromAPI(filters?: DateFilter): Promise<
     // DEFINIR QUAIS CENTROS SERÃO USADOS NO FILTRO
     let centrosCustoParaFiltrar: string[] = []
 
-    if (userRole === 'CONSULTOR') {
-      // CONSULTOR: usa os centros dele OU o filtro selecionado (se for um dos seus)
+    if (userRole === 'CONSULTOR' || userRole === 'SEPOD') {
+      // CONSULTOR e SEPOD: usa os centros dele OU o filtro selecionado (se for um dos seus)
       if (costCenter && costCenter !== 'todos' && userCentrosCusto.includes(costCenter)) {
         // Se o usuário selecionou um centro específico que está na lista dele
         centrosCustoParaFiltrar = [costCenter]
@@ -247,7 +247,7 @@ export async function getDashboardSummaryFromAPI(filters?: DateFilter): Promise<
     // CENTROS DE CUSTO DISPONÍVEIS PARA O FILTRO (apenas para exibição)
     let availableCostCenters: CostCenter[] = []
 
-    if (userRole === 'CONSULTOR') {
+    if (userRole === 'CONSULTOR' || userRole === 'SEPOD') {
       // CONSULTOR vê APENAS os centros dele
       availableCostCenters = userCentrosCusto.map(code => ({
         code,

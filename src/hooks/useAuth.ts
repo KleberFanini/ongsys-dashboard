@@ -31,6 +31,7 @@ interface UseAuthReturn {
 export function useAuth(): UseAuthReturn {
     const { data: session, update, status } = useSession()
     const [isLoading, setIsLoading] = useState(true)
+    const isAuthenticated = status === 'authenticated'
 
     useEffect(() => {
         setIsLoading(status === 'loading')
@@ -39,6 +40,13 @@ export function useAuth(): UseAuthReturn {
     const user = session?.user as User | undefined
     const role = user?.role
     const centroCusto = user?.centrosCusto?.[0]
+
+    const isSuperAdmin = role === 'SUPER_ADMIN'
+    const isOperadorSede = role === 'OPERADOR_SEDE'
+    const isConsultor = role === 'CONSULTOR'
+    const isSepod = role === 'SEPOD'
+
+    console.log('🔒 useAuth - Role:', role, 'Centros:', centroCusto)
 
     const refreshSession = async () => {
         try {
