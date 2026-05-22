@@ -276,14 +276,14 @@ export default function DashboardPage() {
                 // Layout para SEPOD - cards ocupam 2 colunas
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <StatCard
-                            title="Total de Produtos por Pedido"
+                            title="Total de Requisições de Produtos"
                             value={formatNumber(data.totalProductOrders)}
                             subtitle="Quantidade de pedidos de produto"
                             icon={Package}
                             variant="info"
                         />
                     <StatCard
-                        title="Total de Serviços por Pedido"
+                        title="Total de Requisições de Serviço"
                         value={formatNumber(data.totalServiceOrders)}
                         subtitle="Quantidade de pedidos de serviço"
                         icon={Briefcase}
@@ -294,7 +294,7 @@ export default function DashboardPage() {
                 // Layout normal para outros usuários
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <StatCard
-                        title="Total de Produtos por Pedido"
+                        title="Total de Requisições de Produtos"
                         value={formatNumber(data.totalProductOrders)}
                         subtitle="Quantidade de pedidos de produto"
                         icon={Package}
@@ -308,7 +308,7 @@ export default function DashboardPage() {
                         variant="success"
                     />
                     <StatCard
-                        title="Total de Serviços por Pedido"
+                        title="Total de Requisições de Serviço"
                         value={formatNumber(data.totalServiceOrders)}
                         subtitle="Quantidade de pedidos de serviço"
                         icon={Briefcase}
