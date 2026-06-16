@@ -11,12 +11,12 @@ type UserRole = 'SUPER_ADMIN' | 'OPERADOR_SEDE' | 'CONSULTOR' | 'SEPOD'
 function filterAtitudeCenters(centrosCusto: string[]): string[] {
     // Importar dinamicamente para evitar circular dependency
     const { costCentersList } = require('@/src/lib/cost-centers-map')
-    
+
     // Filtrar apenas centros que contêm "ATITUDE" no nome
     const atitudeCodes = costCentersList
         .filter((center: any) => center.name.toUpperCase().includes('ATITUDE'))
         .map((center: any) => center.code)
-    
+
     return centrosCusto.filter(code => atitudeCodes.includes(code))
 }
 
@@ -81,7 +81,7 @@ export const authOptions: NextAuthOptions = {
                 }
 
                 let centrosCusto = usuario.centrosCusto || []
-                
+
                 // 🔥 Para SEPOD, filtrar apenas centros ATITUDE
                 if (usuario.role === 'SEPOD') {
                     centrosCusto = filterAtitudeCenters(centrosCusto)
@@ -126,35 +126,5 @@ export const authOptions: NextAuthOptions = {
         strategy: 'jwt',
         maxAge: 30 * 24 * 60 * 60
     },
-    secret: process.env.NEXTAUTH_SECRET,
-    cookies: isProduction ? {
-        sessionToken: {
-            name: `__Secure-next-auth.session-token`,
-            options: {
-                httpOnly: true,
-                sameSite: 'lax',
-                path: '/',
-                secure: true,
-                domain: '.oxhwsy.easypanel.host'
-            }
-        },
-        callbackUrl: {
-            name: `__Secure-next-auth.callback-url`,
-            options: {
-                sameSite: 'lax',
-                path: '/',
-                secure: true,
-                domain: '.oxhwsy.easypanel.host'
-            }
-        },
-        csrfToken: {
-            name: `__Host-next-auth.csrf-token`,
-            options: {
-                httpOnly: true,
-                sameSite: 'lax',
-                path: '/',
-                secure: true
-            }
-        },
-    } : undefined,
+    secret: process.env.NEXTAUTH_SECRET
 }
